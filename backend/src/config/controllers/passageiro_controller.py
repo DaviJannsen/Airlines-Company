@@ -5,8 +5,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from backend.src.permissions import IsPassenger
-from backend.src.services.passageiro_service import PassageiroService
+# ─── IMPORTS CORRIGIDOS ───────────────────────────────────────────────────────
+from permissions import IsPassenger
+from backend.src.config.services.passageiro_service import PassageiroService
 
 
 class MinhasReservasView(APIView):

@@ -33,7 +33,7 @@ class AuthService:
         id_passageiro, nome_completo = row
 
         # Gera o token JWT para o React gerenciar a sessão do passageiro
-        from backend.src.services.auth_service import _PassageiroUser
+        from backend.src.config.services.auth_services import _PassageiroUser
         user_obj = _PassageiroUser(
             id=id_passageiro,
             nome=nome_completo,

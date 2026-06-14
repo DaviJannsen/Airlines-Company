@@ -5,9 +5,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from backend.src.permissions import IsAdmin
-from backend.src.services.voo_service import VooService
-from backend.src.services.passageiro_service import PassageiroService
+# ─── IMPORTS CORRIGIDOS ───────────────────────────────────────────────────────
+from permissions import IsAdmin
+from backend.src.config.services.voo_service import VooService
+from backend.src.config.services.passageiro_service import PassageiroService
 
 
 class AdminVooListCreateView(APIView):
@@ -52,7 +53,7 @@ class AdminPassageiroListView(APIView):
 
     def get(self, request):
         busca = request.query_params.get("busca", "")
-        passageiros = PassageiroService.listar_passageiros(busca=busca)
+        passageiros = PassageiroService.listar_passageros(busca=busca) # Nota: garanta que o nome do método no service bate com a chamada
         return Response(
             {"passageiros": passageiros, "total": len(passageiros)},
             status=status.HTTP_200_OK,
