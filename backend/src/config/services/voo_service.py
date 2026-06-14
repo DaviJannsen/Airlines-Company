@@ -4,8 +4,6 @@ Airlines Company — Service de Voos
 Responsabilidade: toda a lógica de negócio referente a Voos.
 Usa Raw SQL para queries complexas que refletem exatamente
 o modelo relacional definido no TP2.
-
-Padrão: todas as queries retornam listas de dicts (JSON-friendly).
 """
 from django.db import connection
 
@@ -29,10 +27,8 @@ class VooService:
     def listar_voos(filtros: dict) -> list[dict]:
         """
         Lista voos com filtros opcionais de origem, destino, data e tipo.
-
-        JOIN com Trecho e Aeroporto para trazer informações completas
-        de origem e destino em uma única query eficiente.
         """
+        # ─── CORRIGIDO: Adicionado airline. antes de cada tabela ──────────────
         sql = """
             SELECT
                 v.num_voo,
@@ -55,12 +51,12 @@ class VooService:
                 -- Trecho
                 t.distancia_km,
                 t.tipo_trecho
-            FROM voo v
-            INNER JOIN trecho t ON t.num_voo = v.num_voo
-            INNER JOIN aeroporto a_orig ON a_orig.codigo_IATA = t.codigo_IATA_origem
-            INNER JOIN cidade c_orig    ON c_orig.id_cidade = a_orig.id_cidade
-            INNER JOIN aeroporto a_dest ON a_dest.codigo_IATA = t.codigo_IATA_destino
-            INNER JOIN cidade c_dest    ON c_dest.id_cidade = a_dest.id_cidade
+            FROM airline.voo v
+            INNER JOIN airline.trecho t        ON t.num_voo = v.num_voo
+            INNER JOIN airline.aeroporto a_orig ON a_orig.codigo_IATA = t.codigo_IATA_origem
+            INNER JOIN airline.cidade c_orig    ON c_orig.id_cidade = a_orig.id_cidade
+            INNER JOIN airline.aeroporto a_dest ON a_dest.codigo_IATA = t.codigo_IATA_destino
+            INNER JOIN airline.cidade c_dest    ON c_dest.id_cidade = a_dest.id_cidade
             WHERE 1=1
         """
         params = []
@@ -89,13 +85,8 @@ class VooService:
 
     @staticmethod
     def buscar_voo_por_numero(num_voo: str) -> dict | None:
-        """
-        Retorna detalhes completos de um voo incluindo:
-        - Dados da aeronave e modelo
-        - Todos os trechos
-        - Escala de funcionários
-        """
-        # Query principal do voo
+        """Retorna detalhes completos de um voo e seus trechos."""
+        # ─── CORRIGIDO: Adicionado airline. antes das tabelas do voo ─────────
         sql_voo = """
             SELECT
                 v.num_voo,
@@ -110,13 +101,13 @@ class VooService:
                 ma.modelo,
                 ma.fabricante,
                 ma.capacidade
-            FROM voo v
-            INNER JOIN aeronave a       ON a.cod_aeronave = v.cod_aeronave
-            INNER JOIN modelo_aeronave ma ON ma.modelo = a.modelo
+            FROM airline.voo v
+            INNER JOIN airline.aeronave a       ON a.cod_aeronave = v.cod_aeronave
+            INNER JOIN airline.modelo_aeronave ma ON ma.modelo = a.modelo
             WHERE v.num_voo = %s
             LIMIT 1;
         """
-        # Query de trechos do voo
+        # ─── CORRIGIDO: Adicionado airline. antes das tabelas do trecho ──────
         sql_trechos = """
             SELECT
                 t.codigo_trecho,
@@ -128,11 +119,11 @@ class VooService:
                 t.codigo_IATA_destino,
                 a_d.nome_aeroporto  AS aeroporto_destino,
                 c_d.nome_cidade     AS cidade_destino
-            FROM trecho t
-            INNER JOIN aeroporto a_o ON a_o.codigo_IATA = t.codigo_IATA_origem
-            INNER JOIN cidade c_o    ON c_o.id_cidade = a_o.id_cidade
-            INNER JOIN aeroporto a_d ON a_d.codigo_IATA = t.codigo_IATA_destino
-            INNER JOIN cidade c_d    ON c_d.id_cidade = a_d.id_cidade
+            FROM airline.trecho t
+            INNER JOIN airline.aeroporto a_o ON a_o.codigo_IATA = t.codigo_IATA_origem
+            INNER JOIN airline.cidade c_o    ON c_o.id_cidade = a_o.id_cidade
+            INNER JOIN airline.aeroporto a_d ON a_d.codigo_IATA = t.codigo_IATA_destino
+            INNER JOIN airline.cidade c_d    ON c_d.id_cidade = a_d.id_cidade
             WHERE t.num_voo = %s
             ORDER BY t.codigo_trecho;
         """
@@ -153,27 +144,21 @@ class VooService:
 
     @staticmethod
     def criar_voo(dados: dict) -> dict:
-        """
-        Insere um novo voo no banco de dados.
-        Valida que a aeronave existe e não está em outro voo no mesmo período.
-
-        Retorna o voo criado ou {'error': mensagem}.
-        """
-        # Verifica se a aeronave existe
+        """Insere um novo voo validando restrições de aeronave."""
+        # ─── CORRIGIDO: Adicionado airline. nas validações e inserts ──────────
         sql_check_aeronave = """
-            SELECT cod_aeronave FROM aeronave
+            SELECT cod_aeronave FROM airline.aeronave
             WHERE cod_aeronave = %s LIMIT 1;
         """
-        # Verifica conflito de aeronave na mesma data/horário
         sql_check_conflito = """
-            SELECT num_voo FROM voo
+            SELECT num_voo FROM airline.voo
             WHERE cod_aeronave = %s
               AND data_partida = %s
               AND status_voo NOT IN ('cancelado', 'concluido')
             LIMIT 1;
         """
         sql_insert = """
-            INSERT INTO voo (
+            INSERT INTO airline.voo (
                 num_voo, tipo_voo, data_partida, hora_partida,
                 previsao_chegada, status_voo, cod_aeronave
             ) VALUES (%s, %s, %s, %s, %s, %s, %s)

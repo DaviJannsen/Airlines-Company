@@ -68,9 +68,7 @@ DATABASES = {
         "PASSWORD": config("DB_PASSWORD"),
         "HOST": config("DB_HOST", default="localhost"),
         "PORT": config("DB_PORT", default="5432"),
-        "OPTIONS": {
-            "options": "-c search_path=airline,public"
-        },
+        
     }
 }
 
@@ -88,18 +86,13 @@ REST_FRAMEWORK = {
 }
 
 # ─── JWT (SimpleJWT) ────────────────────────────────────────────────────────────
+# ─── JWT (SimpleJWT) ────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(
-        minutes=config("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", default=60, cast=int)
-    ),
-    "REFRESH_TOKEN_LIFETIME": timedelta(
-        days=config("JWT_REFRESH_TOKEN_LIFETIME_DAYS", default=7, cast=int)
-    ),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
-    # Claims customizados incluindo 'role'
-    "TOKEN_OBTAIN_SERIALIZER": "backend.src.controllers.auth_controller.CustomTokenObtainPairSerializer",
 }
 
 # ─── CORS ───────────────────────────────────────────────────────────────────────
