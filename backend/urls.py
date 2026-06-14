@@ -5,18 +5,18 @@ Prefixo: /api/
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from backend.src.controllers.auth_controller import (
+from backend.src.config.controllers.auth_controller import (
     PassageiroLoginView,
     AdminLoginView,
 )
-from backend.src.controllers.voo_controller import (
+from backend.src.config.controllers.voo_controller import (
     VooListView,
     VooDetailView,
 )
-from backend.src.controllers.passageiro_controller import (
+from backend.src.config.controllers.passageiro_controller import (
     MinhasReservasView,
 )
-from backend.src.controllers.admin_controller import (
+from backend.src.config.controllers.admin_controller import (
     AdminVooListCreateView,
     AdminPassageiroListView,
 )
