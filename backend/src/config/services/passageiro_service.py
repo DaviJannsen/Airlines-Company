@@ -23,44 +23,44 @@ class PassageiroService:
         para trazer todos os dados relevantes ao painel do passageiro.
         """
         sql = """
-            SELECT
-                r.codigo_localizador,
-                r.data_criacao,
-                r.status_pagamento,
-                r.valor_total,
-                r.agencia_parceira,
-                -- Passagem
-                pa.id_passagem,
-                pa.classe_cabine,
-                pa.assento_passageiro,
-                pa.bagagem_despachada,
-                pa.peso_bagagem,
-                -- Voo via Destinado_A
-                v.num_voo,
-                v.tipo_voo,
-                v.data_partida,
-                v.hora_partida,
-                v.previsao_chegada,
-                v.status_voo,
-                -- Trecho (origem → destino)
-                c_orig.nome_cidade  AS cidade_origem,
-                c_dest.nome_cidade  AS cidade_destino,
-                -- Status de embarque
-                ce.status_presenca_passageiro
-            FROM passagem pa
-            INNER JOIN reserva r          ON r.codigo_localizador = pa.codigo_localizador
-            INNER JOIN destinado_a da     ON da.id_passagem = pa.id_passagem
-            INNER JOIN voo v              ON v.num_voo = da.num_voo
-            INNER JOIN trecho t           ON t.num_voo = v.num_voo
-            INNER JOIN aeroporto a_orig   ON a_orig.codigo_IATA = t.codigo_IATA_origem
-            INNER JOIN cidade c_orig      ON c_orig.id_cidade = a_orig.id_cidade
-            INNER JOIN aeroporto a_dest   ON a_dest.codigo_IATA = t.codigo_IATA_destino
-            INNER JOIN cidade c_dest      ON c_dest.id_cidade = a_dest.id_cidade
-            LEFT JOIN controle_embarque ce ON ce.id_passagem = pa.id_passagem
+    SELECT
+        r.codigo_localizador,
+        r.data_criacao,
+        r.status_pagamento,
+        r.valor_total,
+        r.agencia_parceira,
+        -- Passagem
+        pa.id_passagem,
+        pa.classe_cabine,
+        pa.assento_passageiro,
+        pa.bagagem_despachada,
+        pa.peso_bagagem,
+        -- Voo via Destinado_A
+        v.num_voo,
+        v.tipo_voo,
+        v.data_partida,
+        v.hora_partida,
+        v.previsao_chegada,
+        v.status_voo,
+        -- Trecho (origem → destino)
+        c_orig.nome_cidade  AS cidade_origem,
+        c_dest.nome_cidade  AS cidade_destino,
+        -- Status de embarque
+        ce.status_presenca_passageiro
+    FROM airline.passagem pa
+    INNER JOIN airline.reserva r           ON r.codigo_localizador = pa.codigo_localizador
+    INNER JOIN airline.destinado_a da     ON da.id_passagem = pa.id_passagem
+    INNER JOIN airline.voo v               ON v.num_voo = da.num_voo
+    INNER JOIN airline.trecho t           ON t.num_voo = v.num_voo
+    INNER JOIN airline.aeroporto a_orig   ON a_orig.codigo_IATA = t.codigo_IATA_origem
+    INNER JOIN airline.cidade c_orig      ON c_orig.id_cidade = a_orig.id_cidade
+    INNER JOIN airline.aeroporto a_dest   ON a_dest.codigo_IATA = t.codigo_IATA_destino
+    INNER JOIN airline.cidade c_dest      ON c_dest.id_cidade = a_dest.id_cidade
+    LEFT JOIN airline.controle_embarque ce ON ce.id_passagem = pa.id_passagem
                                           AND ce.num_voo = v.num_voo
-            WHERE pa.id_passageiro = %s
-            ORDER BY v.data_partida DESC, v.hora_partida DESC;
-        """
+    WHERE pa.id_passageiro = %s
+    ORDER BY v.data_partida DESC, v.hora_partida DESC;
+"""
         with connection.cursor() as cursor:
             cursor.execute(sql, [id_passageiro])
             return _dictfetchall(cursor)

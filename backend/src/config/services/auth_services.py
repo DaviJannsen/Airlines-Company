@@ -1,22 +1,36 @@
-# backend/src/services/auth_service.py
+"""
+Airlines Company — Service de Autenticação JWT
+"""
 from django.db import connection
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
+
+
+class _PassageiroUser:
+    """Classe mock para forçar o SimpleJWT a assinar dados do passageiro."""
+    is_active = True
+    is_anonymous = False
+    is_authenticated = True
+    pk = None
+
+    def __init__(self, id: int, nome: str, role: str, id_passageiro: int):
+        self.pk = id
+        self.id = id
+        self.nome = nome
+        self.role = role
+        self.id_passageiro = id_passageiro
+        self.username = f"passageiro_{id}"
 
 
 class AuthService:
 
     @staticmethod
     def login_passageiro(documento: str, senha: str) -> dict:
-        """
-        Autentica o Passageiro comparando o documento com a senha.
-        Fiel ao modelo físico do TP3 (Sem campo de senha hash).
-        """
-        # Regra acadêmica: A senha digitada deve ser igual ao documento (CPF/Passaporte)
+        """Autentica o Passageiro comparando o documento com a senha."""
         if documento != senha:
             return {"error": "Credenciais inválidas. Para passageiros, digite seu documento no campo de senha."}
 
-        # Busca se o passageiro realmente existe no banco do Supabase
+        # ─── JÁ ESTÁ COM PREFIXO AIRLINE CORRETO ──────────────────────────────
         sql = """
             SELECT id_passageiro, nome_completo
             FROM airline.Passageiro
@@ -32,8 +46,7 @@ class AuthService:
 
         id_passageiro, nome_completo = row
 
-        # Gera o token JWT para o React gerenciar a sessão do passageiro
-        from backend.src.config.services.auth_services import _PassageiroUser
+        # Instancia localmente a classe de mock definida no topo
         user_obj = _PassageiroUser(
             id=id_passageiro,
             nome=nome_completo,
@@ -63,14 +76,13 @@ class AuthService:
         if not user.is_active:
             return {"error": "Conta inativa. Contate o administrador."}
 
-        # Verifica se está associado à tabela comissao_de_bordo
+        # ─── JÁ ESTÁ COM PREFIXO AIRLINE CORRETO ──────────────────────────────
         sql = """
             SELECT cb.id_funcionario, cb.nome_completo
             FROM airline.Comissao_De_Bordo cb
             WHERE cb.cpf = %s 
             LIMIT 1;
         """
-        # Nota: assume-se que o username criado no Django Admin seja o CPF do funcionário
         with connection.cursor() as cursor:
             cursor.execute(sql, [user.username])
             row = cursor.fetchone()
@@ -95,18 +107,3 @@ class AuthService:
             "access": str(refresh.access_token),
             "refresh": str(refresh),
         }
-
-
-class _PassageiroUser:
-    is_active = True
-    is_anonymous = False
-    is_authenticated = True
-    pk = None
-
-    def __init__(self, id: int, nome: str, role: str, id_passageiro: int):
-        self.pk = id
-        self.id = id
-        self.nome = nome
-        self.role = role
-        self.id_passageiro = id_passageiro
-        self.username = f"passageiro_{id}"
