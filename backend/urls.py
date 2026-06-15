@@ -23,9 +23,9 @@ from backend.src.config.controllers.admin_controller import (
 
 urlpatterns = [
     # ── Autenticação ───────────────────────────────────────────────────────────
-    path("auth/login/",         PassageiroLoginView.as_view(),  name="login-passageiro"),
-    path("auth/login/admin/",   AdminLoginView.as_view(),       name="login-admin"),
-    path("auth/refresh/",       TokenRefreshView.as_view(),     name="token-refresh"),
+    path("auth/login/passageiro/", PassageiroLoginView.as_view(),  name="login-passageiro"),
+    path("auth/login/admin/",      AdminLoginView.as_view(),       name="login-admin"),
+    path("auth/refresh/",          TokenRefreshView.as_view(),     name="token-refresh"),
 
     # ── Público ────────────────────────────────────────────────────────────────
     path("voos/",               VooListView.as_view(),          name="voo-list"),
