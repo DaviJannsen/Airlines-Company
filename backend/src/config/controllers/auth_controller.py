@@ -14,6 +14,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 # ─── IMPORTS CORRIGIDOS ───────────────────────────────────────────────────────
 from backend.src.config.services.auth_services import AuthService
+from backend.src.config.services.passageiro_service import PassageiroService
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -31,6 +32,7 @@ class PassageiroLoginView(APIView):
     POST /api/auth/login/
     Endpoint único inteligente que decide se faz login de passageiro ou admin.
     """
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -61,6 +63,7 @@ class AdminLoginView(APIView):
     POST /api/auth/login/admin/
     Body: { "username": "...", "senha": "..." }
     """
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -79,3 +82,19 @@ class AdminLoginView(APIView):
             return Response({"error": result["error"]}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response(result, status=status.HTTP_200_OK)
+
+
+class CadastroPassageiroView(APIView):
+    """
+    POST /api/auth/cadastro/
+    Registra um novo passageiro na tabela airline.passageiro.
+    Body: { nome_completo, data_nascimento, nacionalidade, documento_identidade, contato_emergencia? }
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        resultado = PassageiroService.cadastrar_passageiro(dados=request.data)
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_201_CREATED)

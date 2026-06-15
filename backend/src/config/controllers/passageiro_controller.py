@@ -10,6 +10,24 @@ from permissions import IsPassenger, JWTPassengerAuthentication
 from backend.src.config.services.passageiro_service import PassageiroService
 
 
+class SolicitarPassagemView(APIView):
+    """
+    POST /api/passageiro/reservar/
+    Cria Reserva + Passagem + Destinado_A + Controle_Embarque em uma transação.
+    """
+    authentication_classes = [JWTPassengerAuthentication]
+    permission_classes = [IsPassenger]
+
+    def post(self, request):
+        id_passageiro = request.user.id_passageiro
+        resultado = PassageiroService.solicitar_passagem(
+            id_passageiro=id_passageiro, dados=request.data
+        )
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_201_CREATED)
+
+
 class MinhasReservasView(APIView):
     """
     GET /api/passageiro/reservas/

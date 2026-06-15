@@ -40,8 +40,11 @@ class IsPassenger(BasePermission):
 
 class IsAdmin(BasePermission):
     def has_permission(self, request, view):
-        return (
-            request.user and 
-            getattr(request.user, 'is_authenticated', False) and 
-            getattr(request.user, 'role', None) == 'admin'
-        )
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return False
+        try:
+            token = AccessToken(auth_header.split(' ')[1])
+            return token.get('role') == 'admin'
+        except Exception:
+            return False
