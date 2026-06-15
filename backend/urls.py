@@ -19,6 +19,8 @@ from backend.src.config.controllers.passageiro_controller import (
     SolicitarPassagemView,
 )
 from backend.src.config.controllers.admin_controller import (
+    AdminSetupCheckView,
+    AdminSetupView,
     AdminVooListCreateView,
     AdminPassageiroListView,
     AeronaveListView,
@@ -30,6 +32,9 @@ from backend.src.config.controllers.admin_controller import (
     EmbarqueListView,
     AutorizarEmbarqueView,
     NegarEmbarqueView,
+    ConfirmarPagamentoView,
+    ModeloAeronaveCreateView,
+    FuncionarioCreateView,
 )
 
 urlpatterns = [
@@ -46,6 +51,10 @@ urlpatterns = [
     # ── Passageiro (role: passenger) ───────────────────────────────────────────
     path("passageiro/reservas/", MinhasReservasView.as_view(),    name="minhas-reservas"),
     path("passageiro/reservar/", SolicitarPassagemView.as_view(), name="reservar"),
+
+    # ── Setup inicial (sem autenticação — bloqueado após primeiro admin) ────────
+    path("admin/check-setup/", AdminSetupCheckView.as_view(), name="admin-check-setup"),
+    path("admin/setup/",       AdminSetupView.as_view(),      name="admin-setup"),
 
     # ── Admin (role: admin) ────────────────────────────────────────────────────
     path("admin/voos/",        AdminVooListCreateView.as_view(),  name="admin-voo-list"),
@@ -69,4 +78,10 @@ urlpatterns = [
          AutorizarEmbarqueView.as_view(), name="embarque-autorizar"),
     path("admin/embarque/<int:id_controle>/negar/",
          NegarEmbarqueView.as_view(), name="embarque-negar"),
+    path("admin/embarque/<int:id_controle>/confirmar-pagamento/",
+         ConfirmarPagamentoView.as_view(), name="embarque-confirmar-pagamento"),
+
+    # Modelos de Aeronave e Funcionários
+    path("admin/modelos-aeronave/", ModeloAeronaveCreateView.as_view(), name="admin-modelos-aeronave"),
+    path("admin/funcionarios/",     FuncionarioCreateView.as_view(),    name="admin-funcionarios"),
 ]

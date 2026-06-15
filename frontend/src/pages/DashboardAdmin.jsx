@@ -20,6 +20,12 @@ const AUTH_STYLE = {
   Negado:     'bg-red-100 text-red-700',
   Pendente:   'bg-amber-100 text-amber-700',
 };
+const PAG_STYLE = {
+  Pago:        'bg-blue-100 text-blue-700',
+  Pendente:    'bg-orange-100 text-orange-700',
+  Cancelado:   'bg-red-100 text-red-700',
+  Reembolsado: 'bg-slate-100 text-slate-600',
+};
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -63,9 +69,106 @@ const AEROPORTOS = [
 const IATAS_NACIONAIS = new Set(['GRU', 'FOR', 'GIG', 'REC', 'MAO']);
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Modal: Criar Aeronave
+// Modal: Criar Modelo de Aeronave
 // ══════════════════════════════════════════════════════════════════════════════
-function CriarAeronaveModal({ modelos, onClose, onSuccess }) {
+function CriarModeloAeronaveModal({ onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({
+    modelo: '', fabricante: '', capacidade: '', kms_rodados: '', preco: '',
+  });
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await api.post('/admin/modelos-aeronave/', {
+        ...form,
+        kms_rodados: form.kms_rodados || null,
+        preco: form.preco || null,
+      });
+      onSuccess(form.modelo);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao criar modelo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white';
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="px-7 py-5 text-white flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #1A3869 0%, #0F2044 100%)' }}>
+          <div>
+            <h3 className="text-lg font-bold">Cadastrar Modelo de Aeronave</h3>
+            <p className="text-blue-300 text-xs mt-0.5">airline.modelo_aeronave</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-7 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nome do Modelo *</label>
+            <input type="text" value={form.modelo} onChange={(e) => set('modelo', e.target.value)}
+              placeholder="Ex: Boeing 737-800" required className={inputCls} />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fabricante *</label>
+            <input type="text" value={form.fabricante} onChange={(e) => set('fabricante', e.target.value)}
+              placeholder="Ex: Boeing, Airbus, Embraer" required className={inputCls} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Capacidade *</label>
+              <input type="number" min="1" value={form.capacidade} onChange={(e) => set('capacidade', e.target.value)}
+                placeholder="189" required className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">KMs Rodados</label>
+              <input type="number" min="0" value={form.kms_rodados} onChange={(e) => set('kms_rodados', e.target.value)}
+                placeholder="0" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Preço (R$)</label>
+              <input type="number" min="0" step="0.01" value={form.preco} onChange={(e) => set('preco', e.target.value)}
+                placeholder="0.00" className={inputCls} />
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl p-3">{error}</div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 py-3 rounded-xl font-semibold text-sm transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-blue-900 hover:bg-blue-800 disabled:opacity-60 text-white py-3 rounded-xl font-semibold text-sm transition-colors">
+              {loading ? 'Cadastrando...' : 'Cadastrar Modelo'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Modal: Criar Aeronave (busca modelos internamente)
+// ══════════════════════════════════════════════════════════════════════════════
+function CriarAeronaveModal({ onClose, onSuccess }) {
+  const [modelos, setModelos] = useState([]);
+  const [showCriarModelo, setShowCriarModelo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
@@ -74,7 +177,22 @@ function CriarAeronaveModal({ modelos, onClose, onSuccess }) {
     data_ultima_manutencao: '',
   });
 
+  const fetchModelos = useCallback(async () => {
+    try {
+      const { data } = await api.get('/admin/aeronaves/');
+      setModelos(data.modelos || []);
+    } catch { /* silently fail */ }
+  }, []);
+
+  useEffect(() => { fetchModelos(); }, [fetchModelos]);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleModeloCriado = async (nomeModelo) => {
+    setShowCriarModelo(false);
+    await fetchModelos();
+    set('modelo', nomeModelo);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -98,6 +216,7 @@ function CriarAeronaveModal({ modelos, onClose, onSuccess }) {
   const modeloSelecionado = modelos.find((m) => m.modelo === form.modelo);
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="px-7 py-5 text-white flex items-center justify-between"
@@ -119,7 +238,13 @@ function CriarAeronaveModal({ modelos, onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Modelo *</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Modelo *</label>
+              <button type="button" onClick={() => setShowCriarModelo(true)}
+                className="text-xs text-blue-700 hover:text-blue-900 font-semibold flex items-center gap-1 transition-colors">
+                <span className="font-bold">+</span> Novo modelo
+              </button>
+            </div>
             <select value={form.modelo} onChange={(e) => set('modelo', e.target.value)} required className={inputCls}>
               <option value="">Selecione o modelo...</option>
               {modelos.map((m) => (
@@ -128,6 +253,9 @@ function CriarAeronaveModal({ modelos, onClose, onSuccess }) {
                 </option>
               ))}
             </select>
+            {modelos.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">Nenhum modelo cadastrado. Clique em "+ Novo modelo".</p>
+            )}
             {modeloSelecionado && (
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {[
@@ -167,6 +295,14 @@ function CriarAeronaveModal({ modelos, onClose, onSuccess }) {
         </form>
       </div>
     </div>
+
+    {showCriarModelo && (
+      <CriarModeloAeronaveModal
+        onClose={() => setShowCriarModelo(false)}
+        onSuccess={handleModeloCriado}
+      />
+    )}
+    </>
   );
 }
 
@@ -254,9 +390,16 @@ function CriarVooModal({ onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="p-8 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Número do Voo *</label>
-              <input type="text" value={form.num_voo} onChange={(e) => set('num_voo', e.target.value.toUpperCase())}
-                placeholder="Ex: LA9999" required className={inputCls + ' font-mono'} />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Número do Voo *</label>
+                <span className={`text-xs font-mono ${form.num_voo.length > 10 ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                  {form.num_voo.length}/10
+                </span>
+              </div>
+              <input type="text" value={form.num_voo}
+                onChange={(e) => set('num_voo', e.target.value.toUpperCase().slice(0, 10))}
+                placeholder="Ex: LA9999" required maxLength={10}
+                className={inputCls + ' font-mono'} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tipo</label>
@@ -377,7 +520,6 @@ function CriarVooModal({ onClose, onSuccess }) {
 
     {showCriarAeronave && (
       <CriarAeronaveModal
-        modelos={modelos}
         onClose={() => setShowCriarAeronave(false)}
         onSuccess={(cod) => { setShowCriarAeronave(false); handleNovaAeronave(cod); }}
       />
@@ -869,24 +1011,182 @@ function PassageirosTab({ passageiros, loading, search, onSearch }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Modal: Criar Funcionário (Piloto ou Comissário)
+// ══════════════════════════════════════════════════════════════════════════════
+function CriarFuncionarioModal({ onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({
+    cargo: 'Piloto',
+    nome_completo: '',
+    cpf: '',
+    data_admissao: '',
+    salario_base: '',
+    licenca_piloto: '',
+    validade_habilitacao: '',
+    validade_certificado: '',
+  });
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await api.post('/admin/funcionarios/', form);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao cadastrar funcionário.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white';
+  const labelCls = 'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[95vh] flex flex-col">
+        <div className="px-7 py-5 text-white flex items-center justify-between shrink-0"
+          style={{ background: 'linear-gradient(135deg, #070E1A 0%, #0F2044 100%)' }}>
+          <div>
+            <h3 className="text-lg font-bold">Cadastrar Funcionário</h3>
+            <p className="text-blue-300 text-xs mt-0.5">airline.comissao_de_bordo + subclasse</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-7 space-y-4 overflow-y-auto">
+          {/* Cargo */}
+          <div>
+            <label className={labelCls}>Cargo *</label>
+            <div className="flex gap-3">
+              {['Piloto', 'Comissário'].map((c) => (
+                <button key={c} type="button" onClick={() => set('cargo', c)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                    form.cargo === c
+                      ? c === 'Piloto'
+                        ? 'bg-blue-900 text-white border-blue-900'
+                        : 'bg-purple-700 text-white border-purple-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}>
+                  {c === 'Piloto' ? '✈ Piloto' : '🛎 Comissário'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dados comuns */}
+          <div>
+            <label className={labelCls}>Nome Completo *</label>
+            <input type="text" value={form.nome_completo} onChange={(e) => set('nome_completo', e.target.value)}
+              placeholder="Ex: Maria Silva" required className={inputCls} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>CPF *</label>
+              <input type="text" value={form.cpf}
+                onChange={(e) => set('cpf', e.target.value.replace(/\D/g, '').slice(0, 11))}
+                placeholder="11 dígitos" required maxLength={11}
+                className={inputCls + ' font-mono'} />
+            </div>
+            <div>
+              <label className={labelCls}>Data de Admissão *</label>
+              <input type="date" value={form.data_admissao} onChange={(e) => set('data_admissao', e.target.value)}
+                required className={inputCls} />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Salário Base (R$) *</label>
+            <input type="number" min="0.01" step="0.01" value={form.salario_base}
+              onChange={(e) => set('salario_base', e.target.value)}
+              placeholder="Ex: 8500.00" required className={inputCls} />
+          </div>
+
+          {/* Campos específicos do cargo */}
+          {form.cargo === 'Piloto' ? (
+            <div className="border border-blue-100 bg-blue-50/40 rounded-2xl p-4 space-y-3">
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Dados do Piloto</p>
+              <div>
+                <label className={labelCls}>Licença de Piloto *</label>
+                <input type="text" value={form.licenca_piloto} onChange={(e) => set('licenca_piloto', e.target.value)}
+                  placeholder="Ex: ANAC-12345" required className={inputCls + ' font-mono'} />
+              </div>
+              <div>
+                <label className={labelCls}>Validade da Habilitação *</label>
+                <input type="date" value={form.validade_habilitacao} onChange={(e) => set('validade_habilitacao', e.target.value)}
+                  required className={inputCls} />
+              </div>
+            </div>
+          ) : (
+            <div className="border border-purple-100 bg-purple-50/40 rounded-2xl p-4 space-y-3">
+              <p className="text-xs font-bold text-purple-700 uppercase tracking-wide">Dados do Comissário</p>
+              <div>
+                <label className={labelCls}>Validade do Certificado *</label>
+                <input type="date" value={form.validade_certificado} onChange={(e) => set('validade_certificado', e.target.value)}
+                  required className={inputCls} />
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl p-3">{error}</div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 py-3 rounded-xl font-semibold text-sm transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-blue-900 hover:bg-blue-800 disabled:opacity-60 text-white py-3 rounded-xl font-semibold text-sm transition-colors">
+              {loading ? 'Cadastrando...' : 'Cadastrar Funcionário'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Tab: Tripulação (visão geral de todos os funcionários)
 // ══════════════════════════════════════════════════════════════════════════════
 function TripulacaoTab() {
   const [funcionarios, setFuncionarios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCriar, setShowCriar] = useState(false);
 
-  useEffect(() => {
+  const fetchFuncionarios = useCallback(() => {
+    setLoading(true);
     api.get('/admin/comissao/').then(({ data }) => {
       setFuncionarios(data.funcionarios || []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { fetchFuncionarios(); }, [fetchFuncionarios]);
 
   const pilotos = funcionarios.filter((f) => f.cargo === 'Piloto');
   const comissarios = funcionarios.filter((f) => f.cargo === 'Comissário');
 
   return (
     <div className="space-y-6">
-      {/* Pilotos */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">
+          {pilotos.length} piloto(s) · {comissarios.length} comissário(s)
+        </p>
+        <button
+          onClick={() => setShowCriar(true)}
+          className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+          <span className="font-bold text-base leading-none">+</span> Adicionar Funcionário
+        </button>
+      </div>
+
       {[
         { titulo: '✈ Pilotos', lista: pilotos, cor: 'blue' },
         { titulo: '🛎 Comissários de Bordo', lista: comissarios, cor: 'purple' },
@@ -933,6 +1233,13 @@ function TripulacaoTab() {
           </div>
         </div>
       ))}
+
+      {showCriar && (
+        <CriarFuncionarioModal
+          onClose={() => setShowCriar(false)}
+          onSuccess={fetchFuncionarios}
+        />
+      )}
     </div>
   );
 }
@@ -973,6 +1280,7 @@ function EmbarqueTab() {
   const [filterVoo, setFilterVoo] = useState('');
   const [denialTarget, setDenialTarget] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const [paymentLoading, setPaymentLoading] = useState(null);
   const [feedback, setFeedback] = useState('');
   const filterTimer = useRef(null);
 
@@ -1008,6 +1316,20 @@ function EmbarqueTab() {
     }
   };
 
+  const handleConfirmarPagamento = async (id_controle) => {
+    setPaymentLoading(id_controle);
+    try {
+      await api.patch(`/admin/embarque/${id_controle}/confirmar-pagamento/`);
+      setFeedback('Pagamento confirmado com sucesso.');
+      await fetchEmbarques(filterVoo);
+    } catch (err) {
+      setFeedback(err.response?.data?.error || 'Erro ao confirmar pagamento.');
+    } finally {
+      setPaymentLoading(null);
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
   const handleNegar = async (motivo) => {
     if (!denialTarget) return;
     const { id_controle } = denialTarget;
@@ -1029,11 +1351,13 @@ function EmbarqueTab() {
     s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
   const counts = {
-    total:       embarques.length,
-    presentes:   embarques.filter((e) => e.status_presenca_passageiro === 'Presente').length,
-    autorizados: embarques.filter((e) => e.status_autorizacao === 'Autorizado').length,
-    pendentes:   embarques.filter((e) => e.status_autorizacao === 'Pendente').length,
-    negados:     embarques.filter((e) => e.status_autorizacao === 'Negado').length,
+    total:            embarques.length,
+    presentes:        embarques.filter((e) => e.status_presenca_passageiro === 'Presente').length,
+    autorizados:      embarques.filter((e) => e.status_autorizacao === 'Autorizado').length,
+    pendentes:        embarques.filter((e) => e.status_autorizacao === 'Pendente').length,
+    negados:          embarques.filter((e) => e.status_autorizacao === 'Negado').length,
+    pagamentoPendente: embarques.filter((e) => e.status_pagamento === 'Pendente').length,
+    pagamentoPago:     embarques.filter((e) => e.status_pagamento === 'Pago').length,
   };
 
   return (
@@ -1043,13 +1367,15 @@ function EmbarqueTab() {
           {feedback}
         </div>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {[
-          { label: 'Total',       value: counts.total,       cls: 'bg-white text-slate-800' },
-          { label: 'Presentes',   value: counts.presentes,   cls: 'bg-emerald-50 text-emerald-700' },
-          { label: 'Autorizados', value: counts.autorizados, cls: 'bg-emerald-50 text-emerald-700' },
-          { label: 'Pendentes',   value: counts.pendentes,   cls: 'bg-amber-50 text-amber-700' },
-          { label: 'Negados',     value: counts.negados,     cls: 'bg-red-50 text-red-700' },
+          { label: 'Total',          value: counts.total,             cls: 'bg-white text-slate-800' },
+          { label: 'Presentes',      value: counts.presentes,         cls: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Autorizados',    value: counts.autorizados,       cls: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Pend. Embarque', value: counts.pendentes,         cls: 'bg-amber-50 text-amber-700' },
+          { label: 'Negados',        value: counts.negados,           cls: 'bg-red-50 text-red-700' },
+          { label: 'Pago',           value: counts.pagamentoPago,     cls: 'bg-blue-50 text-blue-700' },
+          { label: 'Pend. Pag.',     value: counts.pagamentoPendente, cls: 'bg-orange-50 text-orange-700' },
         ].map((s) => (
           <div key={s.label} className={`${s.cls} border border-slate-100 rounded-2xl p-4 text-center`}>
             <p className="text-2xl font-extrabold leading-none">{s.value}</p>
@@ -1073,7 +1399,7 @@ function EmbarqueTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100" style={{ backgroundColor: '#F8FAFC' }}>
-                  {['Passageiro', 'Documento', 'Voo', 'Rota', 'Data/Hora Gate', 'Assento', 'Classe', 'Presença', 'Autorização', 'Impedimento', 'Ações'].map((h) => (
+                  {['Passageiro', 'Documento', 'Voo', 'Rota', 'Data/Hora Gate', 'Assento', 'Classe', 'Presença', 'Autorização', 'Pagamento', 'Impedimento', 'Ações'].map((h) => (
                     <th key={h} className="text-left px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -1103,30 +1429,47 @@ function EmbarqueTab() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${PAG_STYLE[row.status_pagamento] || 'bg-slate-100 text-slate-600'}`}>
+                        {row.status_pagamento || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
                       {row.motivo_impedimento_embarque
                         ? <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-lg max-w-[180px] block truncate" title={row.motivo_impedimento_embarque}>⚠️ {row.motivo_impedimento_embarque}</span>
                         : <span className="text-slate-300 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-4">
-                      {row.status_autorizacao === 'Pendente' ? (
-                        <div className="flex gap-2 whitespace-nowrap">
-                          <button onClick={() => handleAutorizar(row.id_controle_embarque)}
-                            disabled={actionLoading === row.id_controle_embarque}
-                            className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors">
-                            {actionLoading === row.id_controle_embarque ? '...' : '✓ Autorizar'}
+                      <div className="flex flex-col gap-1.5">
+                        {row.status_autorizacao === 'Pendente' && (
+                          <div className="flex gap-2 whitespace-nowrap">
+                            <button onClick={() => handleAutorizar(row.id_controle_embarque)}
+                              disabled={actionLoading === row.id_controle_embarque}
+                              className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors">
+                              {actionLoading === row.id_controle_embarque ? '...' : '✓ Autorizar'}
+                            </button>
+                            <button onClick={() => setDenialTarget({ id_controle: row.id_controle_embarque, nome_passageiro: row.nome_passageiro })}
+                              disabled={actionLoading === row.id_controle_embarque}
+                              className="text-xs font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors">
+                              ✗ Negar
+                            </button>
+                          </div>
+                        )}
+                        {row.status_pagamento === 'Pendente' && (
+                          <button onClick={() => handleConfirmarPagamento(row.id_controle_embarque)}
+                            disabled={paymentLoading === row.id_controle_embarque}
+                            className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            {paymentLoading === row.id_controle_embarque ? '...' : '$ Confirmar Pago'}
                           </button>
-                          <button onClick={() => setDenialTarget({ id_controle: row.id_controle_embarque, nome_passageiro: row.nome_passageiro })}
-                            disabled={actionLoading === row.id_controle_embarque}
-                            className="text-xs font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors">
-                            ✗ Negar
-                          </button>
-                        </div>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
+                        )}
+                        {row.status_autorizacao !== 'Pendente' && row.status_pagamento !== 'Pendente' && (
+                          <span className="text-slate-300 text-xs">—</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {embarques.length === 0 && !loading && (
-                  <tr><td colSpan={11} className="px-5 py-16 text-center text-slate-400">
+                  <tr><td colSpan={12} className="px-5 py-16 text-center text-slate-400">
                     {filterVoo ? `Nenhum registro para o voo "${filterVoo.toUpperCase()}".` : 'Nenhum registro de embarque encontrado.'}
                   </td></tr>
                 )}

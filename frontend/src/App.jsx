@@ -1,30 +1,46 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
-import Login from './pages/Login';
-import Cadastro from './pages/Cadastro';
-import HomePublica from './pages/HomePublica';
+
+import HomePublica        from './pages/HomePublica';
+import Login              from './pages/Login';
+import Cadastro           from './pages/Cadastro';
 import DashboardPassageiro from './pages/DashboardPassageiro';
-import DashboardAdmin from './pages/DashboardAdmin';
+import AdminSetup         from './pages/AdminSetup';
+import AdminLogin         from './pages/AdminLogin';
+import DashboardAdmin     from './pages/DashboardAdmin';
+
+// Layout com Navbar — usado apenas pelo escopo público/passageiro
+function PublicLayout() {
+  return (
+    <>
+      <Navbar />
+      <Outlet />
+    </>
+  );
+}
 
 function AppRoutes() {
   const { user } = useAuth();
 
   return (
-    <>
-      <Navbar />
-      <Routes>
+    <Routes>
+      {/* ══════════════════════════════════════════════════════════════════
+          ESCOPO PÚBLICO / PASSAGEIRO  (com Navbar)
+          Raiz: /
+      ══════════════════════════════════════════════════════════════════ */}
+      <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePublica />} />
 
         <Route
           path="/login"
           element={
-            user ? (
-              <Navigate to={user.role === 'admin' ? '/admin' : '/passageiro'} replace />
-            ) : (
-              <Login />
-            )
+            user?.role === 'passenger'
+              ? <Navigate to="/passageiro" replace />
+              : user?.role === 'admin'
+              ? <Navigate to="/admin/dashboard" replace />
+              : <Login />
           }
         />
 
@@ -41,19 +57,49 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+      </Route>
 
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute role="admin">
-              <DashboardAdmin />
-            </ProtectedRoute>
-          }
-        />
+      {/* ══════════════════════════════════════════════════════════════════
+          ESCOPO ADMIN  (sem Navbar — layout próprio)
+          Raiz: /admin
+      ══════════════════════════════════════════════════════════════════ */}
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
+      {/* Rota secreta de setup — verifica se admin existe antes de exibir */}
+      <Route path="/admin/setup" element={<AdminSetup />} />
+
+      {/* Login isolado do admin */}
+      <Route
+        path="/admin/login"
+        element={
+          user?.role === 'admin'
+            ? <Navigate to="/admin/dashboard" replace />
+            : <AdminLogin />
+        }
+      />
+
+      {/* Dashboard protegido */}
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute role="admin">
+            <DashboardAdmin />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* /admin → redireciona para dashboard (ou login se não autenticado) */}
+      <Route
+        path="/admin"
+        element={
+          user?.role === 'admin'
+            ? <Navigate to="/admin/dashboard" replace />
+            : <Navigate to="/admin/login" replace />
+        }
+      />
+
+      {/* Qualquer rota desconhecida → raiz pública */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

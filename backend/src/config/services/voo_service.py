@@ -267,11 +267,92 @@ class VooService:
         return {"cod_aeronave": cod, "modelo": modelo, "message": "Aeronave criada com sucesso."}
 
     @staticmethod
+    def criar_modelo_aeronave(dados: dict) -> dict:
+        """Insere um novo modelo de aeronave validando unicidade do nome."""
+        modelo    = dados.get('modelo', '').strip()
+        fabricante = dados.get('fabricante', '').strip()
+        capacidade = dados.get('capacidade')
+        kms_rodados = dados.get('kms_rodados') or None
+        preco       = dados.get('preco')       or None
+
+        if not modelo:
+            return {'error': "O campo 'modelo' é obrigatório."}
+        if not fabricante:
+            return {'error': "O campo 'fabricante' é obrigatório."}
+        if not capacidade:
+            return {'error': "O campo 'capacidade' é obrigatório."}
+
+        try:
+            capacidade = int(capacidade)
+            if capacidade <= 0:
+                return {'error': 'Capacidade deve ser maior que zero.'}
+        except (ValueError, TypeError):
+            return {'error': 'Capacidade inválida.'}
+
+        if kms_rodados is not None:
+            try:
+                kms_rodados = int(kms_rodados)
+            except (ValueError, TypeError):
+                kms_rodados = None
+
+        if preco is not None:
+            try:
+                preco = float(preco)
+                if preco <= 0:
+                    preco = None
+            except (ValueError, TypeError):
+                preco = None
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM airline.modelo_aeronave WHERE modelo = %s LIMIT 1;", [modelo]
+            )
+            if cursor.fetchone():
+                return {'error': f"Modelo '{modelo}' já está cadastrado."}
+
+            cursor.execute(
+                """
+                INSERT INTO airline.modelo_aeronave (modelo, fabricante, capacidade, kms_rodados, preco)
+                VALUES (%s, %s, %s, %s, %s);
+                """,
+                [modelo, fabricante, capacidade, kms_rodados, preco],
+            )
+
+        return {
+            'modelo': modelo,
+            'fabricante': fabricante,
+            'capacidade': capacidade,
+            'message': 'Modelo criado com sucesso.',
+        }
+
+    @staticmethod
     def criar_voo(dados: dict) -> dict:
         """
         Insere um novo voo e, se iata_origem/iata_destino forem fornecidos,
         cria o trecho correspondente na mesma transação atômica.
         """
+        num_voo = dados.get("num_voo", "").strip().upper()
+        if len(num_voo) > 10:
+            return {"error": f"Número do voo deve ter no máximo 10 caracteres (atual: {len(num_voo)})."}
+
+        iata_orig = dados.get("iata_origem", "").upper()
+        iata_dest = dados.get("iata_destino", "").upper()
+
+        # Valida aeroportos ANTES de qualquer insert para não deixar voo sem trecho
+        if iata_orig and iata_dest:
+            with connection.cursor() as cursor:
+                for iata in (iata_orig, iata_dest):
+                    cursor.execute(
+                        "SELECT 1 FROM airline.aeroporto WHERE codigo_IATA = %s LIMIT 1;", [iata]
+                    )
+                    if not cursor.fetchone():
+                        return {
+                            "error": (
+                                f"Aeroporto '{iata}' não está cadastrado no banco. "
+                                "Execute python populate.py para inserir os aeroportos."
+                            )
+                        }
+
         with db_transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -308,7 +389,7 @@ class VooService:
                     RETURNING num_voo;
                     """,
                     [
-                        dados["num_voo"],
+                        num_voo,
                         dados["tipo_voo"],
                         dados["data_partida"],
                         dados["hora_partida"],
@@ -319,8 +400,7 @@ class VooService:
                 )
                 num_voo_criado = cursor.fetchone()[0]
 
-                if dados.get("iata_origem") and dados.get("iata_destino"):
-                    tipo_trecho = "Direto"
+                if iata_orig and iata_dest:
                     cursor.execute(
                         """
                         INSERT INTO airline.trecho (
@@ -328,12 +408,7 @@ class VooService:
                             num_voo, status_sazonalidade, via_aerea_regulamentada
                         ) VALUES (%s, 500, %s, %s, %s, 'Normal', TRUE);
                         """,
-                        [
-                            tipo_trecho,
-                            dados["iata_origem"].upper(),
-                            dados["iata_destino"].upper(),
-                            num_voo_criado,
-                        ],
+                        ["Direto", iata_orig, iata_dest, num_voo_criado],
                     )
 
         return {"message": "Voo criado com sucesso.", "num_voo": num_voo_criado}

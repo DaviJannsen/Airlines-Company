@@ -31,6 +31,14 @@ api.interceptors.response.use(
       original.url?.includes('/auth/cadastro/') ||
       original.url?.includes('/auth/refresh/');
 
+    // 403 = token de papel errado (sessão inválida ou token trocado)
+    if (error.response?.status === 403 && !isAuthEndpoint) {
+      const role = localStorage.getItem('role');
+      localStorage.clear();
+      window.location.href = role === 'admin' ? '/admin/login' : '/login';
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       const refreshToken = localStorage.getItem('refresh_token');
 

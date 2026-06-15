@@ -8,34 +8,38 @@
 SET search_path = airline;
 
 -- ------------------------------------------------------------
--- 1. CIDADES
+-- 1. CIDADES  (id explícito para idempotência)
 -- ------------------------------------------------------------
-INSERT INTO Cidade (nome_cidade, pais, clima_predominante, idioma_local) VALUES
-('São Paulo',      'Brasil',         'Subtropical',    'pt-BR'),
-('Fortaleza',      'Brasil',         'Semiárido',      'pt-BR'),
-('Rio de Janeiro', 'Brasil',         'Tropical',       'pt-BR'),
-('Recife',         'Brasil',         'Tropical',       'pt-BR'),
-('Manaus',         'Brasil',         'Equatorial',     'pt-BR'),
-('Miami',          'Estados Unidos', 'Subtropical',    'en-US'),
-('Paris',          'França',         'Oceânico',       'fr-FR'),
-('Lisboa',         'Portugal',       'Mediterrâneo',   'pt-PT'),
-('Buenos Aires',   'Argentina',      'Subtropical',    'es-AR'),
-('Bogotá',         'Colômbia',       'Tropical',       'es-CO');
+INSERT INTO Cidade (id_cidade, nome_cidade, pais, clima_predominante, idioma_local) VALUES
+(1,  'São Paulo',      'Brasil',         'Subtropical',    'pt-BR'),
+(2,  'Fortaleza',      'Brasil',         'Semiárido',      'pt-BR'),
+(3,  'Rio de Janeiro', 'Brasil',         'Tropical',       'pt-BR'),
+(4,  'Recife',         'Brasil',         'Tropical',       'pt-BR'),
+(5,  'Manaus',         'Brasil',         'Equatorial',     'pt-BR'),
+(6,  'Miami',          'Estados Unidos', 'Subtropical',    'en-US'),
+(7,  'Paris',          'França',         'Oceânico',       'fr-FR'),
+(8,  'Lisboa',         'Portugal',       'Mediterrâneo',   'pt-PT'),
+(9,  'Buenos Aires',   'Argentina',      'Subtropical',    'es-AR'),
+(10, 'Bogotá',         'Colômbia',       'Tropical',       'es-CO')
+ON CONFLICT (id_cidade) DO NOTHING;
+
+SELECT setval('airline.cidade_id_cidade_seq', 10);
 
 -- ------------------------------------------------------------
 -- 2. AEROPORTOS
 -- ------------------------------------------------------------
 INSERT INTO Aeroporto (codigo_IATA, nome_aeroporto, capacidade_pistas, id_cidade, altitude_pista_pes, site_aeroporto) VALUES
-('GRU', 'Aeroporto Internacional de Guarulhos',    4, 1, 2459, 'https://www.gru.com.br'),
-('FOR', 'Aeroporto Internacional Pinto Martins',   2, 2,   82, 'https://www.for.infraero.gov.br'),
-('GIG', 'Aeroporto Internacional do Galeão',       3, 3,   28, 'https://www.riogaleao.com'),
-('REC', 'Aeroporto Internacional dos Guararapes',  2, 4,   33, 'https://www.rec.infraero.gov.br'),
-('MAO', 'Aeroporto Internacional Eduardo Gomes',   2, 5,  264, NULL),
-('MIA', 'Miami International Airport',             4, 6,    8, 'https://www.miami-airport.com'),
-('CDG', 'Aéroport Paris-Charles de Gaulle',        5, 7,  392, 'https://www.parisaeroport.fr'),
-('LIS', 'Aeroporto Humberto Delgado',              2, 8,  374, 'https://www.ana.pt'),
-('EZE', 'Aeropuerto Internacional Ministro Pistarini', 2, 9, 67, 'https://www.aa2000.com.ar'),
-('BOG', 'Aeropuerto Internacional El Dorado',      2, 10, 8361, NULL);
+('GRU', 'Aeroporto Internacional de Guarulhos',        4,  1, 2459, 'https://www.gru.com.br'),
+('FOR', 'Aeroporto Internacional Pinto Martins',        2,  2,   82, 'https://www.for.infraero.gov.br'),
+('GIG', 'Aeroporto Internacional do Galeão',            3,  3,   28, 'https://www.riogaleao.com'),
+('REC', 'Aeroporto Internacional dos Guararapes',       2,  4,   33, 'https://www.rec.infraero.gov.br'),
+('MAO', 'Aeroporto Internacional Eduardo Gomes',        2,  5,  264, NULL),
+('MIA', 'Miami International Airport',                  4,  6,    8, 'https://www.miami-airport.com'),
+('CDG', 'Aéroport Paris-Charles de Gaulle',             5,  7,  392, 'https://www.parisaeroport.fr'),
+('LIS', 'Aeroporto Humberto Delgado',                   2,  8,  374, 'https://www.ana.pt'),
+('EZE', 'Aeropuerto Internacional Ministro Pistarini',  2,  9,   67, 'https://www.aa2000.com.ar'),
+('BOG', 'Aeropuerto Internacional El Dorado',           2, 10, 8361, NULL)
+ON CONFLICT (codigo_IATA) DO NOTHING;
 
 -- ------------------------------------------------------------
 -- 3. MODELOS DE AERONAVE

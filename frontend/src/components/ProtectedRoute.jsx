@@ -15,10 +15,16 @@ export default function ProtectedRoute({ children, role }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    return role === 'admin'
+      ? <Navigate to="/admin/login" replace />
+      : <Navigate to="/login" replace />;
+  }
 
   if (role && user.role !== role) {
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/passageiro'} replace />;
+    return user.role === 'admin'
+      ? <Navigate to="/admin/dashboard" replace />
+      : <Navigate to="/passageiro" replace />;
   }
 
   return children;
