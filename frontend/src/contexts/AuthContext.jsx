@@ -2,18 +2,29 @@ import { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
+function readUserFromStorage() {
+  const token = localStorage.getItem('access_token');
+  const role  = localStorage.getItem('role');
+  const nome  = localStorage.getItem('nome');
+  return token && role ? { token, role, nome } : null;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    const role = localStorage.getItem('role');
-    const nome = localStorage.getItem('nome');
-    if (token && role) {
-      setUser({ token, role, nome });
-    }
+    setUser(readUserFromStorage());
     setLoading(false);
+
+    // Sincroniza quando outra aba altera o localStorage (ex: login de admin)
+    const handleStorage = (e) => {
+      if (['access_token', 'role', 'nome'].includes(e.key)) {
+        setUser(readUserFromStorage());
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   const login = (data) => {

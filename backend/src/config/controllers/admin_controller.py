@@ -1,15 +1,79 @@
 """
 Airlines Company — Controller do Painel Administrativo
 """
+from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 
-# ─── IMPORTS CORRIGIDOS ───────────────────────────────────────────────────────
 from permissions import IsAdmin
 from backend.src.config.services.voo_service import VooService
 from backend.src.config.services.passageiro_service import PassageiroService
 from backend.src.config.services.funcionario_service import FuncionarioService
+
+
+class AdminSetupCheckView(APIView):
+    """
+    GET /api/admin/check-setup/
+    Verifica se já existe um superusuário cadastrado no sistema.
+    Sem autenticação — usado pela tela de setup inicial.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        has_admin = User.objects.filter(is_superuser=True).exists()
+        return Response({"has_admin": has_admin}, status=status.HTTP_200_OK)
+
+
+class AdminSetupView(APIView):
+    """
+    POST /api/admin/setup/
+    Cria o primeiro administrador do sistema (superusuário Django).
+    Bloqueado automaticamente após a criação do primeiro admin.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if User.objects.filter(is_superuser=True).exists():
+            return Response(
+                {"error": "Setup bloqueado: já existe um administrador cadastrado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        nome     = request.data.get("nome", "").strip()
+        username = request.data.get("username", "").strip()
+        email    = request.data.get("email", "").strip()
+        senha    = request.data.get("senha", "")
+
+        if not all([nome, username, email, senha]):
+            return Response(
+                {"error": "Todos os campos são obrigatórios."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(senha) < 8:
+            return Response(
+                {"error": "A senha deve ter no mínimo 8 caracteres."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            partes = nome.split(" ", 1)
+            User.objects.create_superuser(
+                username=username,
+                email=email,
+                password=senha,
+                first_name=partes[0],
+                last_name=partes[1] if len(partes) > 1 else "",
+            )
+            return Response(
+                {"message": "Administrador criado com sucesso."},
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AdminVooListCreateView(APIView):
@@ -183,3 +247,36 @@ class NegarEmbarqueView(APIView):
         if resultado.get("error"):
             return Response({"error": resultado["error"]}, status=status.HTTP_404_NOT_FOUND)
         return Response(resultado, status=status.HTTP_200_OK)
+
+
+class ConfirmarPagamentoView(APIView):
+    """PATCH /api/admin/embarque/<id_controle>/confirmar-pagamento/"""
+    permission_classes = [IsAdmin]
+
+    def patch(self, _request, id_controle):
+        resultado = PassageiroService.confirmar_pagamento(id_controle=id_controle)
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_200_OK)
+
+
+class ModeloAeronaveCreateView(APIView):
+    """POST /api/admin/modelos-aeronave/ — Cria novo modelo de aeronave."""
+    permission_classes = [IsAdmin]
+
+    def post(self, request):
+        resultado = VooService.criar_modelo_aeronave(request.data)
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_201_CREATED)
+
+
+class FuncionarioCreateView(APIView):
+    """POST /api/admin/funcionarios/ — Cadastra piloto ou comissário."""
+    permission_classes = [IsAdmin]
+
+    def post(self, request):
+        resultado = FuncionarioService.criar_funcionario(request.data)
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_201_CREATED)

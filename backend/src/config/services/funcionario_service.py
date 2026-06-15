@@ -3,7 +3,8 @@ Airlines Company — Service de Funcionários (Comissão de Bordo)
 ──────────────────────────────────────────────────────────────
 Gerencia pilotos, comissários e escala de trabalho.
 """
-from django.db import connection
+import re
+from django.db import connection, transaction as db_transaction
 
 
 def _dictfetchall(cursor) -> list[dict]:
@@ -166,4 +167,86 @@ class FuncionarioService:
             "message": "Funcionário removido da escala.",
             "id_funcionario": id_funcionario,
             "num_voo": num_voo,
+        }
+
+    @staticmethod
+    def criar_funcionario(dados: dict) -> dict:
+        """
+        Cria um Piloto ou Comissário.
+        Insere em comissao_de_bordo (tabela base) e depois na subclasse correspondente,
+        tudo numa transação atômica.
+        """
+        cargo         = dados.get('cargo', '').strip()
+        nome_completo = dados.get('nome_completo', '').strip()
+        cpf           = re.sub(r'\D', '', dados.get('cpf', ''))
+        data_admissao = dados.get('data_admissao', '').strip()
+        salario_base  = dados.get('salario_base')
+
+        if cargo not in ('Piloto', 'Comissário'):
+            return {'error': "Cargo deve ser 'Piloto' ou 'Comissário'."}
+        if not all([nome_completo, cpf, data_admissao, salario_base]):
+            return {'error': 'Nome, CPF, data de admissão e salário são obrigatórios.'}
+        if not re.match(r'^\d{11}$', cpf):
+            return {'error': 'CPF deve conter exatamente 11 dígitos numéricos.'}
+
+        try:
+            salario_base = float(salario_base)
+            if salario_base <= 0:
+                return {'error': 'Salário deve ser maior que zero.'}
+        except (ValueError, TypeError):
+            return {'error': 'Salário inválido.'}
+
+        if cargo == 'Piloto':
+            licenca      = dados.get('licenca_piloto', '').strip()
+            validade_hab = dados.get('validade_habilitacao', '').strip()
+            if not licenca or not validade_hab:
+                return {'error': 'Licença e validade de habilitação são obrigatórias para Piloto.'}
+        else:
+            validade_cert = dados.get('validade_certificado', '').strip()
+            if not validade_cert:
+                return {'error': 'Validade do certificado é obrigatória para Comissário.'}
+
+        with db_transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM airline.comissao_de_bordo WHERE cpf = %s LIMIT 1;", [cpf]
+                )
+                if cursor.fetchone():
+                    return {'error': f"CPF '{cpf}' já está cadastrado."}
+
+                cursor.execute(
+                    """
+                    INSERT INTO airline.comissao_de_bordo
+                        (cpf, nome_completo, data_admissao, salario_base)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id_funcionario;
+                    """,
+                    [cpf, nome_completo, data_admissao, salario_base],
+                )
+                id_func = cursor.fetchone()[0]
+
+                if cargo == 'Piloto':
+                    cursor.execute(
+                        """
+                        INSERT INTO airline.piloto
+                            (id_funcionario, licenca_piloto, validade_habilitacao)
+                        VALUES (%s, %s, %s);
+                        """,
+                        [id_func, licenca, validade_hab],
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO airline.comissario
+                            (id_funcionario, validade_certificado)
+                        VALUES (%s, %s);
+                        """,
+                        [id_func, validade_cert],
+                    )
+
+        return {
+            'id_funcionario': id_func,
+            'nome_completo': nome_completo,
+            'cargo': cargo,
+            'message': f'{cargo} cadastrado com sucesso.',
         }

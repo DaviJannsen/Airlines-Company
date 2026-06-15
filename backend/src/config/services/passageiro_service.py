@@ -291,12 +291,16 @@ class PassageiroService:
                 pa.documento_identidade,
                 p.classe_cabine,
                 p.assento_passageiro,
+                p.codigo_localizador,
+                r.status_pagamento,
+                r.valor_total::TEXT    AS valor_total,
                 v.data_partida,
                 v.hora_partida,
                 c_orig.nome_cidade     AS cidade_origem,
                 c_dest.nome_cidade     AS cidade_destino
             FROM airline.controle_embarque ce
             INNER JOIN airline.passagem p    ON p.id_passagem = ce.id_passagem
+            INNER JOIN airline.reserva r     ON r.codigo_localizador = p.codigo_localizador
             INNER JOIN airline.passageiro pa ON pa.id_passageiro = p.id_passageiro
             INNER JOIN airline.voo v         ON v.num_voo = ce.num_voo
             INNER JOIN LATERAL (
@@ -361,3 +365,24 @@ class PassageiroService:
             if not cursor.fetchone():
                 return {"error": "Registro de embarque não encontrado."}
         return {"message": "Embarque negado.", "id_controle_embarque": id_controle}
+
+    @staticmethod
+    def confirmar_pagamento(id_controle: int) -> dict:
+        """Marca status_pagamento = 'Pago' na reserva vinculada ao controle de embarque."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE airline.reserva r
+                SET status_pagamento = 'Pago'
+                FROM airline.passagem p
+                INNER JOIN airline.controle_embarque ce ON ce.id_passagem = p.id_passagem
+                WHERE r.codigo_localizador = p.codigo_localizador
+                  AND ce.id_controle_embarque = %s
+                  AND r.status_pagamento = 'Pendente'
+                RETURNING r.codigo_localizador;
+                """,
+                [id_controle],
+            )
+            if not cursor.fetchone():
+                return {"error": "Registro não encontrado ou pagamento já confirmado."}
+        return {"message": "Pagamento confirmado.", "id_controle_embarque": id_controle}
