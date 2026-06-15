@@ -26,11 +26,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["nome"] = user.get_full_name() or user.username
         return token
 
-
 class PassageiroLoginView(APIView):
     """
     POST /api/auth/login/
-    Body: { "documento_identidade": "...", "senha": "..." }
+    Endpoint único inteligente que decide se faz login de passageiro ou admin.
     """
     permission_classes = [AllowAny]
 
@@ -43,11 +42,16 @@ class PassageiroLoginView(APIView):
                 {"error": "Os campos 'documento_identidade' e 'senha' são obrigatórios."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Se NÃO contiver os prefixos de passageiro, trata o login como ADMIN
+        if not (document.startswith("CPF-") or document.startswith("PASSPORT-") or document.startswith("DNI-")):
+            result = AuthService.login_admin(username=document, senha=senha)
+        else:
+            # Se tiver os prefixos, segue o fluxo normal do passageiro 
+            result = AuthService.login_passageiro(documento=document, senha=senha)
 
-        result = AuthService.login_passageiro(documento=document, senha=senha)
-
+        # Trata as respostas de erro unificadas
         if result.get("error"):
-            return Response({"error": result["error"]}, status=status.HTTP_41_UNAUTHORIZED)
+            return Response({"error": result["error"]}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response(result, status=status.HTTP_200_OK)
 
