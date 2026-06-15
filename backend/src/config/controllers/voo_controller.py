@@ -8,6 +8,7 @@ from backend.src.config.services.voo_service import VooService
 
 class VooListView(APIView):
     """Controlador para listar todos os voos disponíveis com filtros opcionais."""
+    authentication_classes = []   # evita 401 por token de passageiro em endpoint público
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -24,6 +25,7 @@ class VooListView(APIView):
 
 class VooDetailView(APIView):
     """Controlador para ver detalhes de um voo específico pelo seu código."""
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request, num_voo):

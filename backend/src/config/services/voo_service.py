@@ -5,7 +5,7 @@ Responsabilidade: toda a lógica de negócio referente a Voos.
 Usa Raw SQL para queries complexas que refletem exatamente
 o modelo relacional definido no TP2.
 """
-from django.db import connection
+from django.db import connection, transaction as db_transaction
 
 
 def _dictfetchall(cursor) -> list[dict]:
@@ -38,25 +38,28 @@ class VooService:
                 v.previsao_chegada,
                 v.status_voo,
                 v.cod_aeronave,
-                -- Aeroporto de Origem
                 t.codigo_IATA_origem                AS iata_origem,
                 a_orig.nome_aeroporto               AS aeroporto_origem,
                 c_orig.nome_cidade                  AS cidade_origem,
                 c_orig.pais                         AS pais_origem,
-                -- Aeroporto de Destino
                 t.codigo_IATA_destino               AS iata_destino,
                 a_dest.nome_aeroporto               AS aeroporto_destino,
                 c_dest.nome_cidade                  AS cidade_destino,
                 c_dest.pais                         AS pais_destino,
-                -- Trecho
                 t.distancia_km,
-                t.tipo_trecho
+                t.tipo_trecho,
+                ma.capacidade                       AS capacidade_total,
+                COUNT(DISTINCT da.id_passagem)      AS passagens_emitidas,
+                (ma.capacidade - COUNT(DISTINCT da.id_passagem)) AS assentos_restantes
             FROM airline.voo v
-            INNER JOIN airline.trecho t        ON t.num_voo = v.num_voo
-            INNER JOIN airline.aeroporto a_orig ON a_orig.codigo_IATA = t.codigo_IATA_origem
-            INNER JOIN airline.cidade c_orig    ON c_orig.id_cidade = a_orig.id_cidade
-            INNER JOIN airline.aeroporto a_dest ON a_dest.codigo_IATA = t.codigo_IATA_destino
-            INNER JOIN airline.cidade c_dest    ON c_dest.id_cidade = a_dest.id_cidade
+            INNER JOIN airline.trecho t          ON t.num_voo = v.num_voo
+            INNER JOIN airline.aeroporto a_orig  ON a_orig.codigo_IATA = t.codigo_IATA_origem
+            INNER JOIN airline.cidade c_orig     ON c_orig.id_cidade = a_orig.id_cidade
+            INNER JOIN airline.aeroporto a_dest  ON a_dest.codigo_IATA = t.codigo_IATA_destino
+            INNER JOIN airline.cidade c_dest     ON c_dest.id_cidade = a_dest.id_cidade
+            INNER JOIN airline.aeronave aer      ON aer.cod_aeronave = v.cod_aeronave
+            INNER JOIN airline.modelo_aeronave ma ON ma.modelo = aer.modelo
+            LEFT  JOIN airline.destinado_a da    ON da.num_voo = v.num_voo
             WHERE 1=1
         """
         params = []
@@ -77,7 +80,15 @@ class VooService:
             sql += " AND v.tipo_voo = %s"
             params.append(filtros["tipo_voo"])
 
-        sql += " ORDER BY v.data_partida ASC, v.hora_partida ASC;"
+        sql += """
+            GROUP BY
+                v.num_voo, v.tipo_voo, v.data_partida, v.hora_partida, v.previsao_chegada,
+                v.status_voo, v.cod_aeronave,
+                t.codigo_IATA_origem, a_orig.nome_aeroporto, c_orig.nome_cidade, c_orig.pais,
+                t.codigo_IATA_destino, a_dest.nome_aeroporto, c_dest.nome_cidade, c_dest.pais,
+                t.distancia_km, t.tipo_trecho, ma.capacidade
+            ORDER BY v.data_partida ASC, v.hora_partida ASC;
+        """
 
         with connection.cursor() as cursor:
             cursor.execute(sql, params)
@@ -143,55 +154,186 @@ class VooService:
         return voo
 
     @staticmethod
-    def criar_voo(dados: dict) -> dict:
-        """Insere um novo voo validando restrições de aeronave."""
-        # ─── CORRIGIDO: Adicionado airline. nas validações e inserts ──────────
-        sql_check_aeronave = """
-            SELECT cod_aeronave FROM airline.aeronave
-            WHERE cod_aeronave = %s LIMIT 1;
+    def atualizar_status_voo(num_voo: str, novo_status: str) -> dict:
         """
-        sql_check_conflito = """
-            SELECT num_voo FROM airline.voo
-            WHERE cod_aeronave = %s
-              AND data_partida = %s
-              AND status_voo NOT IN ('cancelado', 'concluido')
-            LIMIT 1;
+        Atualiza o status de um voo com validação de transições permitidas.
+        Transições válidas:
+          Programado → Em Voo | Atrasado | Cancelado
+          Atrasado   → Em Voo | Cancelado
+          Em Voo     → Concluído
         """
-        sql_insert = """
-            INSERT INTO airline.voo (
-                num_voo, tipo_voo, data_partida, hora_partida,
-                previsao_chegada, status_voo, cod_aeronave
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING num_voo;
-        """
+        TRANSICOES = {
+            'Programado': {'Em Voo', 'Atrasado', 'Cancelado'},
+            'Atrasado':   {'Em Voo', 'Cancelado'},
+            'Em Voo':     {'Concluído'},
+        }
+        VALIDOS = {'Programado', 'Em Voo', 'Concluído', 'Cancelado', 'Atrasado'}
+
+        if novo_status not in VALIDOS:
+            return {"error": f"Status '{novo_status}' inválido."}
 
         with connection.cursor() as cursor:
-            cursor.execute(sql_check_aeronave, [dados["cod_aeronave"]])
-            if not cursor.fetchone():
-                return {"error": f"Aeronave '{dados['cod_aeronave']}' não encontrada."}
+            cursor.execute(
+                "SELECT status_voo FROM airline.voo WHERE num_voo = %s LIMIT 1;", [num_voo]
+            )
+            row = cursor.fetchone()
 
-            cursor.execute(sql_check_conflito, [dados["cod_aeronave"], dados["data_partida"]])
-            conflito = cursor.fetchone()
-            if conflito:
-                return {
-                    "error": (
-                        f"Aeronave '{dados['cod_aeronave']}' já está alocada no "
-                        f"voo '{conflito[0]}' nesta data."
-                    )
-                }
+        if not row:
+            return {"error": f"Voo '{num_voo}' não encontrado."}
+
+        status_atual = row[0]
+        permitidos = TRANSICOES.get(status_atual, set())
+
+        if novo_status not in permitidos:
+            return {
+                "error": (
+                    f"Não é possível mover de '{status_atual}' para '{novo_status}'. "
+                    f"Transições permitidas: {', '.join(sorted(permitidos)) or 'nenhuma'}."
+                )
+            }
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE airline.voo SET status_voo = %s WHERE num_voo = %s;",
+                [novo_status, num_voo],
+            )
+
+        return {"num_voo": num_voo, "status_anterior": status_atual, "status_voo": novo_status}
+
+    @staticmethod
+    def listar_aeronaves() -> list[dict]:
+        """Lista todas as aeronaves disponíveis para o dropdown de criação de voo."""
+        sql = """
+            SELECT
+                a.cod_aeronave,
+                a.modelo,
+                ma.fabricante,
+                ma.capacidade,
+                a.aviso_manutencao,
+                a.data_ultima_manutencao::TEXT AS data_ultima_manutencao
+            FROM airline.aeronave a
+            INNER JOIN airline.modelo_aeronave ma ON ma.modelo = a.modelo
+            ORDER BY a.cod_aeronave ASC;
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            return _dictfetchall(cursor)
+
+    @staticmethod
+    def listar_modelos_aeronave() -> list[dict]:
+        """Lista modelos disponíveis para o dropdown de criação de aeronave."""
+        sql = """
+            SELECT modelo, fabricante, capacidade, kms_rodados, preco::TEXT AS preco
+            FROM airline.modelo_aeronave
+            ORDER BY fabricante, modelo ASC;
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            return _dictfetchall(cursor)
+
+    @staticmethod
+    def criar_aeronave(dados: dict) -> dict:
+        """Insere uma nova aeronave validando código único e modelo existente."""
+        cod = dados.get("cod_aeronave", "").strip().upper()
+        modelo = dados.get("modelo", "").strip()
+        data_manutencao = dados.get("data_ultima_manutencao") or None
+
+        if not cod:
+            return {"error": "O campo 'cod_aeronave' é obrigatório."}
+        if not modelo:
+            return {"error": "O campo 'modelo' é obrigatório."}
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM airline.aeronave WHERE cod_aeronave = %s LIMIT 1;", [cod]
+            )
+            if cursor.fetchone():
+                return {"error": f"Já existe uma aeronave com o código '{cod}'."}
 
             cursor.execute(
-                sql_insert,
-                [
-                    dados["num_voo"],
-                    dados["tipo_voo"],
-                    dados["data_partida"],
-                    dados["hora_partida"],
-                    dados["previsao_chegada"],
-                    dados.get("status_voo", "programado"),
-                    dados["cod_aeronave"],
-                ],
+                "SELECT 1 FROM airline.modelo_aeronave WHERE modelo = %s LIMIT 1;", [modelo]
             )
-            num_voo_criado = cursor.fetchone()[0]
+            if not cursor.fetchone():
+                return {"error": f"Modelo '{modelo}' não encontrado."}
+
+            cursor.execute(
+                """
+                INSERT INTO airline.aeronave (cod_aeronave, modelo, aviso_manutencao, data_ultima_manutencao)
+                VALUES (%s, %s, FALSE, %s);
+                """,
+                [cod, modelo, data_manutencao],
+            )
+
+        return {"cod_aeronave": cod, "modelo": modelo, "message": "Aeronave criada com sucesso."}
+
+    @staticmethod
+    def criar_voo(dados: dict) -> dict:
+        """
+        Insere um novo voo e, se iata_origem/iata_destino forem fornecidos,
+        cria o trecho correspondente na mesma transação atômica.
+        """
+        with db_transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT cod_aeronave FROM airline.aeronave WHERE cod_aeronave = %s LIMIT 1;",
+                    [dados["cod_aeronave"]],
+                )
+                if not cursor.fetchone():
+                    return {"error": f"Aeronave '{dados['cod_aeronave']}' não encontrada."}
+
+                cursor.execute(
+                    """
+                    SELECT num_voo FROM airline.voo
+                    WHERE cod_aeronave = %s AND data_partida = %s
+                      AND status_voo NOT IN ('Cancelado', 'Concluído')
+                    LIMIT 1;
+                    """,
+                    [dados["cod_aeronave"], dados["data_partida"]],
+                )
+                conflito = cursor.fetchone()
+                if conflito:
+                    return {
+                        "error": (
+                            f"Aeronave '{dados['cod_aeronave']}' já está alocada no "
+                            f"voo '{conflito[0]}' nesta data."
+                        )
+                    }
+
+                cursor.execute(
+                    """
+                    INSERT INTO airline.voo (
+                        num_voo, tipo_voo, data_partida, hora_partida,
+                        previsao_chegada, status_voo, cod_aeronave
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING num_voo;
+                    """,
+                    [
+                        dados["num_voo"],
+                        dados["tipo_voo"],
+                        dados["data_partida"],
+                        dados["hora_partida"],
+                        dados["previsao_chegada"],
+                        dados.get("status_voo", "Programado"),
+                        dados["cod_aeronave"],
+                    ],
+                )
+                num_voo_criado = cursor.fetchone()[0]
+
+                if dados.get("iata_origem") and dados.get("iata_destino"):
+                    tipo_trecho = "Direto"
+                    cursor.execute(
+                        """
+                        INSERT INTO airline.trecho (
+                            tipo_trecho, distancia_km, codigo_IATA_origem, codigo_IATA_destino,
+                            num_voo, status_sazonalidade, via_aerea_regulamentada
+                        ) VALUES (%s, 500, %s, %s, %s, 'Normal', TRUE);
+                        """,
+                        [
+                            tipo_trecho,
+                            dados["iata_origem"].upper(),
+                            dados["iata_destino"].upper(),
+                            num_voo_criado,
+                        ],
+                    )
 
         return {"message": "Voo criado com sucesso.", "num_voo": num_voo_criado}
