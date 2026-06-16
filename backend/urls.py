@@ -39,6 +39,7 @@ from backend.src.config.controllers.admin_controller import (
     FuncionarioCreateView,
     FuncionarioUpdateView,
     IdiomaListView,
+    RelatorioView,
 )
 
 urlpatterns = [
@@ -92,4 +93,5 @@ urlpatterns = [
     path("admin/funcionarios/",                      FuncionarioCreateView.as_view(),    name="admin-funcionarios"),
     path("admin/funcionarios/<int:id_funcionario>/", FuncionarioUpdateView.as_view(),    name="admin-funcionario-update"),
     path("admin/idiomas/",                           IdiomaListView.as_view(),           name="admin-idiomas"),
+    path("admin/relatorios/",                        RelatorioView.as_view(),            name="admin-relatorios"),
 ]

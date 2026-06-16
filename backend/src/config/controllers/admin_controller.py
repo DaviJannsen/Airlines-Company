@@ -297,6 +297,23 @@ class IdiomaListView(APIView):
         return Response({"idiomas": idiomas}, status=status.HTTP_200_OK)
 
 
+class RelatorioView(APIView):
+    """
+    GET /api/admin/relatorios/?tipo=painel|receita
+    painel  → vw_painel_voos     (VIEW · JOIN · GROUP BY · COUNT)
+    receita → query direta       (JOIN · GROUP BY · COUNT · SUM · AVG · HAVING)
+    """
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        tipo = request.query_params.get('tipo', 'painel')
+        if tipo == 'receita':
+            dados = VooService.relatorio_receita_por_classe()
+        else:
+            dados = VooService.relatorio_painel_voos()
+        return Response({'dados': dados, 'tipo': tipo}, status=status.HTTP_200_OK)
+
+
 class FuncionarioCreateView(APIView):
     """POST /api/admin/funcionarios/ — Cadastra piloto ou comissário."""
     permission_classes = [IsAdmin]

@@ -1,5 +1,6 @@
 # reset.py — Limpa os dados operacionais preservando cidades, aeroportos e idiomas
 import os
+import re
 import subprocess
 import psycopg
 from decouple import config
@@ -25,9 +26,50 @@ RESTART IDENTITY CASCADE
 """
 
 
-def executar_sql(cursor, sql: str):
-    statements = [s.strip() for s in sql.split(';') if s.strip()]
-    for stmt in statements:
+def split_sql_simples(sql: str) -> list[str]:
+    """Split básico por ';' — para arquivos sem dollar-quoting."""
+    return [s.strip() for s in sql.split(';') if s.strip()]
+
+
+def split_sql_dollar_safe(sql: str) -> list[str]:
+    """Split por ';' ignorando comentários -- e blocos $$ ... $$ (funções PL/pgSQL)."""
+    statements, current, in_dq, tag = [], [], False, ''
+    i = 0; n = len(sql)
+    while i < n:
+        if in_dq:
+            if sql[i:i + len(tag)] == tag:
+                in_dq = False; current.append(tag); i += len(tag)
+            else:
+                current.append(sql[i]); i += 1
+            continue
+        # comentário de linha -- (ignora ; dentro)
+        if sql[i:i + 2] == '--':
+            while i < n and sql[i] != '\n':
+                current.append(sql[i]); i += 1
+            continue
+        # início de dollar-quote
+        m = re.match(r'\$[^$]*\$', sql[i:])
+        if m:
+            tag = m.group(0); in_dq = True
+            current.append(tag); i += len(tag); continue
+        # fim de statement
+        if sql[i] == ';':
+            s = ''.join(current).strip()
+            if s:
+                statements.append(s)
+            current = []; i += 1; continue
+        current.append(sql[i]); i += 1
+    s = ''.join(current).strip()
+    if s:
+        statements.append(s)
+    return statements
+
+
+def executar_arquivo(cursor, path: str, dollar_safe: bool = False):
+    with open(path, 'r', encoding='utf-8') as f:
+        sql = f.read()
+    splitter = split_sql_dollar_safe if dollar_safe else split_sql_simples
+    for stmt in splitter(sql):
         cursor.execute(stmt)
 
 
@@ -70,6 +112,9 @@ def main():
         print("\nOperação cancelada.")
         return
 
+    path_create  = os.path.join("database", "01_create.sql")
+    path_objects = os.path.join("database", "03_objects.sql")
+
     print("\nConectando ao banco de dados...")
     try:
         with psycopg.connect(database_url) as conn:
@@ -81,14 +126,15 @@ def main():
                 print("  Dados operacionais removidos. Cidades, aeroportos e idiomas preservados.")
             else:
                 # Primeira execução — schema não existe ainda
-                path_create = os.path.join("database", "01_create.sql")
                 if not os.path.exists(path_create):
                     print(f"ERRO: Arquivo não encontrado: {path_create}")
                     return
                 print("Schema 'airline' não encontrado — criando estrutura do zero...")
                 with conn.cursor() as cursor:
-                    with open(path_create, "r", encoding="utf-8") as f:
-                        executar_sql(cursor, f.read())
+                    executar_arquivo(cursor, path_create, dollar_safe=False)
+                    if os.path.exists(path_objects):
+                        executar_arquivo(cursor, path_objects, dollar_safe=True)
+                        print("  Views, índices e gatilhos criados.")
                 conn.commit()
                 print("  Schema criado com sucesso.")
 
