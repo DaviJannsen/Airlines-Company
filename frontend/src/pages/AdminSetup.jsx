@@ -11,6 +11,8 @@ export default function AdminSetup() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    // Qualquer token anterior é inválido neste contexto (reset/setup)
+    localStorage.clear();
     api.get('/admin/check-setup/')
       .then(({ data }) => {
         if (data.has_admin) navigate('/admin/login', { replace: true });

@@ -582,6 +582,10 @@ function FlightDetailModal({ numVoo, onClose }) {
 
   const voo = data?.voo;
   const passageiros = data?.passageiros || [];
+  const emVooOuConcluido = ['Em Voo', 'Concluído'].includes(voo?.status_voo);
+  const passageirosVisiveis = emVooOuConcluido
+    ? passageiros.filter((p) => p.status_autorizacao !== 'Negado')
+    : passageiros;
   const comissao = data?.comissao || [];
   const escalados = comissao.filter((f) => f.escalado_neste_voo);
   const disponiveis = comissao.filter((f) => !f.escalado_neste_voo);
@@ -624,7 +628,7 @@ function FlightDetailModal({ numVoo, onClose }) {
         {/* Inner tabs */}
         <div className="flex gap-1 border-b border-slate-200 px-6 shrink-0">
           {[
-            { key: 'passageiros', label: `🧳 Passageiros (${passageiros.length})` },
+            { key: 'passageiros', label: `🧳 Passageiros (${passageirosVisiveis.length})` },
             { key: 'tripulacao',  label: `✈ Tripulação (${escalados.length} escalados)` },
           ].map((t) => (
             <button key={t.key} onClick={() => setInnerTab(t.key)}
@@ -654,7 +658,7 @@ function FlightDetailModal({ numVoo, onClose }) {
 
             /* ── Tab: Passageiros ── */
             innerTab === 'passageiros' ? (
-              passageiros.length === 0 ? (
+              passageirosVisiveis.length === 0 ? (
                 <div className="text-center py-16 text-slate-400">
                   <p className="text-4xl mb-3">🧳</p>
                   <p>Nenhum passageiro confirmado neste voo.</p>
@@ -672,7 +676,7 @@ function FlightDetailModal({ numVoo, onClose }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {passageiros.map((p) => (
+                      {passageirosVisiveis.map((p) => (
                         <tr key={p.id_passagem} className="hover:bg-slate-50/70">
                           <td className="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">{p.nome_completo}</td>
                           <td className="px-4 py-3">
@@ -891,6 +895,10 @@ function VoosTab({ voos, loading, onVooCreated, onSearch }) {
                   const chegada = voo.previsao_chegada
                     ? new Date(voo.previsao_chegada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                     : '—';
+                  const ativo = ['Em Voo', 'Concluído'].includes(voo.status_voo);
+                  const contPassageiros = ativo
+                    ? (voo.passagens_embarcadas ?? voo.passagens_emitidas)
+                    : voo.passagens_emitidas;
                   const lotado = (voo.assentos_restantes ?? 99) <= 0;
                   const acoes = STATUS_ACOES[voo.status_voo] || [];
                   return (
@@ -923,7 +931,7 @@ function VoosTab({ voos, loading, onVooCreated, onSearch }) {
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                             lotado ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'
                           }`}>
-                            {lotado ? 'LOTADO' : `${voo.passagens_emitidas}/${voo.capacidade_total}`}
+                            {lotado ? 'LOTADO' : `${contPassageiros}/${voo.capacidade_total}`}
                           </span>
                         ) : <span className="text-slate-300 text-xs">—</span>}
                       </td>
@@ -1868,6 +1876,8 @@ export default function DashboardAdmin() {
     }
   }, []);
 
+  const handleVooSearch = useCallback((busca) => fetchVoos(busca), [fetchVoos]);
+
   useEffect(() => { fetchVoos(); }, [fetchVoos]);
 
   const fetchPassageiros = useCallback(async (busca = '') => {
@@ -1953,8 +1963,8 @@ export default function DashboardAdmin() {
           <VoosTab
             voos={voos}
             loading={voosLoading}
-            onVooCreated={() => fetchVoos()}
-            onSearch={(busca) => fetchVoos(busca)}
+            onVooCreated={fetchVoos}
+            onSearch={handleVooSearch}
           />
         )}
         {tab === 'passageiros' && (
