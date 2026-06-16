@@ -51,7 +51,15 @@ class VooService:
                 ma.capacidade                       AS capacidade_total,
                 COUNT(DISTINCT da.id_passagem)      AS passagens_emitidas,
                 (ma.capacidade - COUNT(DISTINCT da.id_passagem)) AS assentos_restantes,
-                v.data_hora_efetiva_cancelamento::TEXT         AS data_hora_cancelamento
+                v.data_hora_efetiva_cancelamento::TEXT         AS data_hora_cancelamento,
+                (
+                    SELECT COUNT(DISTINCT da2.id_passagem)
+                    FROM airline.destinado_a da2
+                    LEFT JOIN airline.controle_embarque ce2
+                        ON ce2.id_passagem = da2.id_passagem AND ce2.num_voo = da2.num_voo
+                    WHERE da2.num_voo = v.num_voo
+                      AND (ce2.status_autorizacao IS DISTINCT FROM 'Negado')
+                ) AS passagens_embarcadas
             FROM airline.voo v
             INNER JOIN airline.trecho t          ON t.num_voo = v.num_voo
             INNER JOIN airline.aeroporto a_orig  ON a_orig.codigo_IATA = t.codigo_IATA_origem
