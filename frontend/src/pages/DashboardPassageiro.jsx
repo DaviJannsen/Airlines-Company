@@ -470,6 +470,124 @@ function ReservarModal({ onClose, onSuccess }) {
   );
 }
 
+// ── EditarPerfilModal ─────────────────────────────────────────────────────────
+function EditarPerfilModal({ onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [fetchingPerfil, setFetchingPerfil] = useState(true);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({
+    nome_completo: '',
+    data_nascimento: '',
+    contato_emergencia: '',
+    necessidades_especiais: '',
+  });
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    api.get('/passageiro/perfil/')
+      .then(({ data }) => {
+        setForm({
+          nome_completo: data.nome_completo || '',
+          data_nascimento: data.data_nascimento || '',
+          contato_emergencia: data.contato_emergencia || '',
+          necessidades_especiais: data.necessidades_especiais || '',
+        });
+      })
+      .catch(() => setError('Não foi possível carregar os dados do perfil.'))
+      .finally(() => setFetchingPerfil(false));
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await api.patch('/passageiro/perfil/', form);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao atualizar perfil.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white';
+  const labelCls = 'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden max-h-[95vh] flex flex-col">
+        <div className="px-7 py-5 text-white flex items-center justify-between shrink-0"
+          style={{ background: 'linear-gradient(135deg, #070E1A 0%, #0F2044 100%)' }}>
+          <div>
+            <h3 className="text-lg font-bold">Editar Perfil</h3>
+            <p className="text-blue-300 text-xs mt-0.5">Documento de identidade não pode ser alterado</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        {fetchingPerfil ? (
+          <div className="p-7 space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-7 space-y-4 overflow-y-auto">
+            <div>
+              <label className={labelCls}>Nome Completo *</label>
+              <input type="text" value={form.nome_completo}
+                onChange={(e) => set('nome_completo', e.target.value)}
+                required className={inputCls} />
+            </div>
+
+            <div>
+              <label className={labelCls}>Data de Nascimento</label>
+              <input type="date" value={form.data_nascimento}
+                onChange={(e) => set('data_nascimento', e.target.value)}
+                className={inputCls} />
+            </div>
+
+            <div>
+              <label className={labelCls}>Contato de Emergência</label>
+              <input type="text" value={form.contato_emergencia}
+                onChange={(e) => set('contato_emergencia', e.target.value)}
+                placeholder="Ex: (85) 99999-0000"
+                className={inputCls} />
+            </div>
+
+            <div>
+              <label className={labelCls}>Necessidades Especiais</label>
+              <textarea value={form.necessidades_especiais}
+                onChange={(e) => set('necessidades_especiais', e.target.value)}
+                placeholder="Descreva se houver alguma necessidade especial..."
+                rows={3}
+                className={inputCls + ' resize-none'} />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl p-3">{error}</div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 py-3 rounded-xl font-semibold text-sm transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={loading}
+                className="flex-1 bg-blue-900 hover:bg-blue-800 disabled:opacity-60 text-white py-3 rounded-xl font-semibold text-sm transition-colors">
+                {loading ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
@@ -495,6 +613,7 @@ export default function DashboardPassageiro() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showPerfil, setShowPerfil] = useState(false);
 
   const fetchReservas = async () => {
     setLoading(true);
@@ -525,7 +644,14 @@ export default function DashboardPassageiro() {
         }}
       >
         <div className="max-w-6xl mx-auto">
-          <p className="text-blue-300 text-sm mb-1">Bem-vindo de volta</p>
+          <div className="flex items-start justify-between mb-1">
+            <p className="text-blue-300 text-sm">Bem-vindo de volta</p>
+            <button
+              onClick={() => setShowPerfil(true)}
+              className="text-xs font-semibold text-white/70 hover:text-white border border-white/20 hover:border-white/50 px-3 py-1.5 rounded-lg transition-colors">
+              ✏ Editar Perfil
+            </button>
+          </div>
           <h1 className="text-3xl font-extrabold text-white">{user?.nome}</h1>
 
           <div className="grid grid-cols-3 gap-4 mt-7">
@@ -601,6 +727,13 @@ export default function DashboardPassageiro() {
         <ReservarModal
           onClose={() => setShowModal(false)}
           onSuccess={fetchReservas}
+        />
+      )}
+
+      {showPerfil && (
+        <EditarPerfilModal
+          onClose={() => setShowPerfil(false)}
+          onSuccess={() => {}}
         />
       )}
     </div>

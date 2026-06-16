@@ -16,6 +16,7 @@ from backend.src.config.controllers.voo_controller import (
 )
 from backend.src.config.controllers.passageiro_controller import (
     MinhasReservasView,
+    MeuPerfilView,
     SolicitarPassagemView,
 )
 from backend.src.config.controllers.admin_controller import (
@@ -30,11 +31,13 @@ from backend.src.config.controllers.admin_controller import (
     EscalaView,
     EscalaRemoverView,
     EmbarqueListView,
+    VoosComPresencaView,
     AutorizarEmbarqueView,
     NegarEmbarqueView,
     ConfirmarPagamentoView,
     ModeloAeronaveCreateView,
     FuncionarioCreateView,
+    FuncionarioUpdateView,
 )
 
 urlpatterns = [
@@ -51,6 +54,7 @@ urlpatterns = [
     # ── Passageiro (role: passenger) ───────────────────────────────────────────
     path("passageiro/reservas/", MinhasReservasView.as_view(),    name="minhas-reservas"),
     path("passageiro/reservar/", SolicitarPassagemView.as_view(), name="reservar"),
+    path("passageiro/perfil/",   MeuPerfilView.as_view(),         name="meu-perfil"),
 
     # ── Setup inicial (sem autenticação — bloqueado após primeiro admin) ────────
     path("admin/check-setup/", AdminSetupCheckView.as_view(), name="admin-check-setup"),
@@ -73,7 +77,8 @@ urlpatterns = [
          EscalaRemoverView.as_view(), name="admin-escala-remove"),
 
     # Controle de Embarque
-    path("admin/embarque/",    EmbarqueListView.as_view(),        name="embarque-list"),
+    path("admin/embarque/",                        EmbarqueListView.as_view(),      name="embarque-list"),
+    path("admin/embarque/voos-com-presenca/",      VoosComPresencaView.as_view(),   name="embarque-voos-com-presenca"),
     path("admin/embarque/<int:id_controle>/autorizar/",
          AutorizarEmbarqueView.as_view(), name="embarque-autorizar"),
     path("admin/embarque/<int:id_controle>/negar/",
@@ -82,6 +87,7 @@ urlpatterns = [
          ConfirmarPagamentoView.as_view(), name="embarque-confirmar-pagamento"),
 
     # Modelos de Aeronave e Funcionários
-    path("admin/modelos-aeronave/", ModeloAeronaveCreateView.as_view(), name="admin-modelos-aeronave"),
-    path("admin/funcionarios/",     FuncionarioCreateView.as_view(),    name="admin-funcionarios"),
+    path("admin/modelos-aeronave/",                  ModeloAeronaveCreateView.as_view(), name="admin-modelos-aeronave"),
+    path("admin/funcionarios/",                      FuncionarioCreateView.as_view(),    name="admin-funcionarios"),
+    path("admin/funcionarios/<int:id_funcionario>/", FuncionarioUpdateView.as_view(),    name="admin-funcionario-update"),
 ]

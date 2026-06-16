@@ -811,6 +811,7 @@ function VoosTab({ voos, loading, onVooCreated }) {
   const [detailVoo, setDetailVoo] = useState(null);
   const [statusLoading, setStatusLoading] = useState(null);
   const [feedback, setFeedback] = useState('');
+  const [search, setSearch] = useState('');
 
   const handleStatus = async (num_voo, novoStatus) => {
     setStatusLoading(num_voo + novoStatus);
@@ -826,15 +827,33 @@ function VoosTab({ voos, loading, onVooCreated }) {
     }
   };
 
+  const voosFiltrados = search.trim()
+    ? voos.filter((v) => v.num_voo.toUpperCase().includes(search.trim().toUpperCase()))
+    : voos;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-slate-500">{voos.length} voo(s) cadastrado(s)</p>
-        <button
-          onClick={() => setShowCriar(true)}
-          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <span className="font-bold text-base leading-none">+</span> Criar Voo
-        </button>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between mb-4">
+        <div className="relative flex-1 max-w-sm">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por número do voo..."
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-400 transition-colors"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-slate-500 whitespace-nowrap">
+            {voosFiltrados.length}/{voos.length} voo(s)
+          </p>
+          <button
+            onClick={() => setShowCriar(true)}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap">
+            <span className="font-bold text-base leading-none">+</span> Criar Voo
+          </button>
+        </div>
       </div>
 
       {feedback && (
@@ -859,7 +878,7 @@ function VoosTab({ voos, loading, onVooCreated }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {voos.map((voo) => {
+                {voosFiltrados.map((voo) => {
                   const st = VOO_STATUS_STYLE[voo.status_voo] || VOO_STATUS_STYLE.Programado;
                   const chegada = voo.previsao_chegada
                     ? new Date(voo.previsao_chegada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -932,8 +951,10 @@ function VoosTab({ voos, loading, onVooCreated }) {
                     </tr>
                   );
                 })}
-                {voos.length === 0 && !loading && (
-                  <tr><td colSpan={9} className="px-5 py-16 text-center text-slate-400">Nenhum voo cadastrado.</td></tr>
+                {voosFiltrados.length === 0 && !loading && (
+                  <tr><td colSpan={9} className="px-5 py-16 text-center text-slate-400">
+                    {search.trim() ? `Nenhum voo encontrado para "${search.trim().toUpperCase()}".` : 'Nenhum voo cadastrado.'}
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -1155,36 +1176,176 @@ function CriarFuncionarioModal({ onClose, onSuccess }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Modal: Editar Funcionário
+// ══════════════════════════════════════════════════════════════════════════════
+function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
+  const isPiloto = funcionario.cargo === 'Piloto';
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({
+    nome_completo: funcionario.nome_completo || '',
+    salario_base: funcionario.salario_base || '',
+    licenca_piloto: funcionario.licenca_piloto || '',
+    validade_habilitacao: funcionario.validade_certificado && isPiloto ? funcionario.validade_certificado : '',
+    validade_certificado: !isPiloto ? (funcionario.validade_certificado || '') : '',
+  });
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const payload = {
+      nome_completo: form.nome_completo,
+      salario_base: form.salario_base,
+      ...(isPiloto
+        ? { licenca_piloto: form.licenca_piloto, validade_habilitacao: form.validade_habilitacao }
+        : { validade_certificado: form.validade_certificado }),
+    };
+    try {
+      await api.patch(`/admin/funcionarios/${funcionario.id_funcionario}/`, payload);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erro ao atualizar funcionário.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white';
+  const labelCls = 'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
+  const accentColor = isPiloto ? 'blue' : 'purple';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[95vh] flex flex-col">
+        <div className="px-7 py-5 text-white flex items-center justify-between shrink-0"
+          style={{ background: 'linear-gradient(135deg, #070E1A 0%, #0F2044 100%)' }}>
+          <div>
+            <h3 className="text-lg font-bold">Editar Funcionário</h3>
+            <p className="text-blue-300 text-xs mt-0.5">
+              {isPiloto ? '✈ Piloto' : '🛎 Comissário'} · CPF {funcionario.cpf}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">×</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-7 space-y-4 overflow-y-auto">
+          <div>
+            <label className={labelCls}>Nome Completo *</label>
+            <input type="text" value={form.nome_completo}
+              onChange={(e) => set('nome_completo', e.target.value)}
+              required className={inputCls} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Salário Base (R$) *</label>
+            <input type="number" min="0.01" step="0.01" value={form.salario_base}
+              onChange={(e) => set('salario_base', e.target.value)}
+              required className={inputCls} />
+          </div>
+
+          {isPiloto ? (
+            <div className={`border border-${accentColor}-100 bg-${accentColor}-50/40 rounded-2xl p-4 space-y-3`}>
+              <p className={`text-xs font-bold text-${accentColor}-700 uppercase tracking-wide`}>Dados do Piloto</p>
+              <div>
+                <label className={labelCls}>Licença de Piloto</label>
+                <input type="text" value={form.licenca_piloto}
+                  onChange={(e) => set('licenca_piloto', e.target.value)}
+                  className={inputCls + ' font-mono'} />
+              </div>
+              <div>
+                <label className={labelCls}>Validade da Habilitação</label>
+                <input type="date" value={form.validade_habilitacao}
+                  onChange={(e) => set('validade_habilitacao', e.target.value)}
+                  className={inputCls} />
+              </div>
+            </div>
+          ) : (
+            <div className="border border-purple-100 bg-purple-50/40 rounded-2xl p-4 space-y-3">
+              <p className="text-xs font-bold text-purple-700 uppercase tracking-wide">Dados do Comissário</p>
+              <div>
+                <label className={labelCls}>Validade do Certificado</label>
+                <input type="date" value={form.validade_certificado}
+                  onChange={(e) => set('validade_certificado', e.target.value)}
+                  className={inputCls} />
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl p-3">{error}</div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 py-3 rounded-xl font-semibold text-sm transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-blue-900 hover:bg-blue-800 disabled:opacity-60 text-white py-3 rounded-xl font-semibold text-sm transition-colors">
+              {loading ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Tab: Tripulação (visão geral de todos os funcionários)
 // ══════════════════════════════════════════════════════════════════════════════
 function TripulacaoTab() {
   const [funcionarios, setFuncionarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCriar, setShowCriar] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [search, setSearch] = useState('');
 
-  const fetchFuncionarios = useCallback(() => {
+  const fetchFuncionarios = useCallback((busca = '') => {
     setLoading(true);
-    api.get('/admin/comissao/').then(({ data }) => {
-      setFuncionarios(data.funcionarios || []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    api.get('/admin/comissao/', { params: busca ? { busca } : {} })
+      .then(({ data }) => { setFuncionarios(data.funcionarios || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { fetchFuncionarios(); }, [fetchFuncionarios]);
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchFuncionarios(search), search ? 400 : 0);
+    return () => clearTimeout(t);
+  }, [search, fetchFuncionarios]);
 
   const pilotos = funcionarios.filter((f) => f.cargo === 'Piloto');
   const comissarios = funcionarios.filter((f) => f.cargo === 'Comissário');
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
-          {pilotos.length} piloto(s) · {comissarios.length} comissário(s)
-        </p>
-        <button
-          onClick={() => setShowCriar(true)}
-          className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <span className="font-bold text-base leading-none">+</span> Adicionar Funcionário
-        </button>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div className="relative flex-1 max-w-sm">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou CPF..."
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-colors"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-slate-500 whitespace-nowrap">
+            {pilotos.length} piloto(s) · {comissarios.length} comissário(s)
+          </p>
+          <button
+            onClick={() => setShowCriar(true)}
+            className="flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap">
+            <span className="font-bold text-base leading-none">+</span> Adicionar Funcionário
+          </button>
+        </div>
       </div>
 
       {[
@@ -1199,7 +1360,7 @@ function TripulacaoTab() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100" style={{ backgroundColor: '#F8FAFC' }}>
-                      {['Nome', 'CPF', cor === 'blue' ? 'Licença' : 'Val. Certificado', 'Validade', 'Salário', 'Voos Escalados'].map((h) => (
+                      {['Nome', 'CPF', cor === 'blue' ? 'Licença' : 'Val. Certificado', 'Validade', 'Salário', 'Voos Escalados', ''].map((h) => (
                         <th key={h} className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1221,10 +1382,19 @@ function TripulacaoTab() {
                             Number(f.total_voos) > 0 ? 'bg-emerald-600' : 'bg-slate-300'
                           }`}>{f.total_voos}</span>
                         </td>
+                        <td className="px-5 py-4">
+                          <button
+                            onClick={() => setEditando(f)}
+                            className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">
+                            Editar
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     {lista.length === 0 && !loading && (
-                      <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-400">Nenhum registro encontrado.</td></tr>
+                      <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">
+                        {search ? `Nenhum resultado para "${search}".` : 'Nenhum registro encontrado.'}
+                      </td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1238,6 +1408,14 @@ function TripulacaoTab() {
         <CriarFuncionarioModal
           onClose={() => setShowCriar(false)}
           onSuccess={fetchFuncionarios}
+        />
+      )}
+
+      {editando && (
+        <EditarFuncionarioModal
+          funcionario={editando}
+          onClose={() => setEditando(null)}
+          onSuccess={() => { fetchFuncionarios(search); setEditando(null); }}
         />
       )}
     </div>
@@ -1284,6 +1462,19 @@ function EmbarqueTab() {
   const [feedback, setFeedback] = useState('');
   const filterTimer = useRef(null);
 
+  const [voosPresenca, setVoosPresenca] = useState([]);
+  const [presencaLoading, setPresencaLoading] = useState(true);
+  const [havingFiltro, setHavingFiltro] = useState('presentes');
+
+  const fetchVoosPresenca = useCallback(async (filtro = 'presentes') => {
+    setPresencaLoading(true);
+    try {
+      const { data } = await api.get('/admin/embarque/voos-com-presenca/', { params: { filtro } });
+      setVoosPresenca(data.voos || []);
+    } catch { /* silently fail */ }
+    finally { setPresencaLoading(false); }
+  }, []);
+
   const fetchEmbarques = useCallback(async (voo = '') => {
     setLoading(true);
     try {
@@ -1294,7 +1485,10 @@ function EmbarqueTab() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchEmbarques(); }, [fetchEmbarques]);
+  useEffect(() => {
+    fetchEmbarques();
+    fetchVoosPresenca(havingFiltro);
+  }, [fetchEmbarques, fetchVoosPresenca, havingFiltro]);
 
   const handleFilterChange = (val) => {
     setFilterVoo(val);
@@ -1307,7 +1501,7 @@ function EmbarqueTab() {
     try {
       await api.patch(`/admin/embarque/${id_controle}/autorizar/`);
       setFeedback('Embarque autorizado com sucesso.');
-      await fetchEmbarques(filterVoo);
+      await Promise.all([fetchEmbarques(filterVoo), fetchVoosPresenca(havingFiltro)]);
     } catch (err) {
       setFeedback(err.response?.data?.error || 'Erro ao autorizar.');
     } finally {
@@ -1383,6 +1577,89 @@ function EmbarqueTab() {
           </div>
         ))}
       </div>
+
+      {/* ── Painel HAVING: resumo de voos com filtros configuráveis ── */}
+      {(() => {
+        const FILTROS = [
+          { key: 'presentes',         label: 'Presença no Gate',     col: 'presentes',        badge: 'bg-emerald-100 text-emerald-700' },
+          { key: 'embarque_pendente', label: 'Embarque Pendente',    col: 'embarque_pendente', badge: 'bg-amber-100 text-amber-700' },
+          { key: 'pag_pendente',      label: 'Pagamento Pendente',   col: 'pag_pendente',      badge: 'bg-orange-100 text-orange-700' },
+        ];
+        const filtroAtivo = FILTROS.find((f) => f.key === havingFiltro) || FILTROS[0];
+
+        const handleFiltroChange = (key) => {
+          setHavingFiltro(key);
+          fetchVoosPresenca(key);
+        };
+
+        return (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-700">Resumo por Voo</span>
+                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wide">GROUP BY + HAVING</span>
+              </div>
+              <div className="flex gap-2 sm:ml-auto flex-wrap">
+                {FILTROS.map((f) => (
+                  <button key={f.key} onClick={() => handleFiltroChange(f.key)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors border ${
+                      havingFiltro === f.key
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                    }`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {presencaLoading ? (
+              <div className="px-5 py-6 text-sm text-slate-400">Carregando...</div>
+            ) : voosPresenca.length === 0 ? (
+              <div className="px-5 py-6 text-sm text-slate-400">
+                Nenhum voo com "{filtroAtivo.label.toLowerCase()}" no momento.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100" style={{ backgroundColor: '#F8FAFC' }}>
+                      {['Voo', 'Rota', 'Data', 'Status', 'Total', filtroAtivo.label, ''].map((h) => (
+                        <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {voosPresenca.map((v) => (
+                      <tr key={v.num_voo} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs font-bold border border-slate-200 text-slate-600 px-2 py-1 rounded-lg">{v.num_voo}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{v.cidade_origem} → {v.cidade_destino}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{fmtDate(v.data_partida)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${(VOO_STATUS_STYLE[v.status_voo] || VOO_STATUS_STYLE.Programado).cls}`}>{v.status_voo}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-700">{v.total_passageiros}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${filtroAtivo.badge}`}>
+                            {v[filtroAtivo.col]}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => handleFilterChange(v.num_voo)}
+                            className="text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            Ver detalhes ›
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="flex items-center gap-3">
         <input type="text" value={filterVoo} onChange={(e) => handleFilterChange(e.target.value)}
