@@ -479,7 +479,7 @@ function EditarPerfilModal({ onClose, onSuccess }) {
     nome_completo: '',
     data_nascimento: '',
     contato_emergencia: '',
-    necessidades_especiais: '',
+    necessidades_especiais: false,
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -491,7 +491,7 @@ function EditarPerfilModal({ onClose, onSuccess }) {
           nome_completo: data.nome_completo || '',
           data_nascimento: data.data_nascimento || '',
           contato_emergencia: data.contato_emergencia || '',
-          necessidades_especiais: data.necessidades_especiais || '',
+          necessidades_especiais: !!data.necessidades_especiais,
         });
       })
       .catch(() => setError('Não foi possível carregar os dados do perfil.'))
@@ -560,11 +560,21 @@ function EditarPerfilModal({ onClose, onSuccess }) {
 
             <div>
               <label className={labelCls}>Necessidades Especiais</label>
-              <textarea value={form.necessidades_especiais}
-                onChange={(e) => set('necessidades_especiais', e.target.value)}
-                placeholder="Descreva se houver alguma necessidade especial..."
-                rows={3}
-                className={inputCls + ' resize-none'} />
+              <button
+                type="button"
+                onClick={() => set('necessidades_especiais', !form.necessidades_especiais)}
+                className={`flex items-center gap-3 w-full border rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
+                  form.necessidades_especiais
+                    ? 'bg-orange-50 border-orange-300 text-orange-700'
+                    : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}>
+                <span className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  form.necessidades_especiais ? 'bg-orange-500 border-orange-500' : 'border-slate-300'
+                }`}>
+                  {form.necessidades_especiais && <span className="text-white text-xs font-bold">✓</span>}
+                </span>
+                {form.necessidades_especiais ? '♿ Possui necessidades especiais' : 'Não possui necessidades especiais'}
+              </button>
             </div>
 
             {error && (
