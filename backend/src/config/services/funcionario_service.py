@@ -37,7 +37,16 @@ class FuncionarioService:
                         WHEN p.id_funcionario IS NOT NULL THEN p.validade_habilitacao::TEXT
                         ELSE com.validade_certificado::TEXT
                     END AS validade_certificado,
-                    CASE WHEN et.id_funcionario IS NOT NULL THEN TRUE ELSE FALSE END AS escalado_neste_voo
+                    CASE WHEN et.id_funcionario IS NOT NULL THEN TRUE ELSE FALSE END AS escalado_neste_voo,
+                    (
+                        SELECT json_agg(
+                            json_build_object('cod_idioma', fi.cod_idioma, 'nome', i.nome, 'nivel_fluencia', fi.nivel_fluencia)
+                            ORDER BY i.nome
+                        )
+                        FROM airline.funcionario_idioma fi
+                        JOIN airline.idioma i ON i.cod_idioma = fi.cod_idioma
+                        WHERE fi.id_funcionario = c.id_funcionario
+                    ) AS idiomas
                 FROM airline.comissao_de_bordo c
                 LEFT JOIN airline.piloto p       ON p.id_funcionario = c.id_funcionario
                 LEFT JOIN airline.comissario com  ON com.id_funcionario = c.id_funcionario
@@ -74,7 +83,16 @@ class FuncionarioService:
                     (
                         SELECT COUNT(*) FROM airline.escala_trabalho et
                         WHERE et.id_funcionario = c.id_funcionario
-                    ) AS total_voos
+                    ) AS total_voos,
+                    (
+                        SELECT json_agg(
+                            json_build_object('cod_idioma', fi.cod_idioma, 'nome', i.nome, 'nivel_fluencia', fi.nivel_fluencia)
+                            ORDER BY i.nome
+                        )
+                        FROM airline.funcionario_idioma fi
+                        JOIN airline.idioma i ON i.cod_idioma = fi.cod_idioma
+                        WHERE fi.id_funcionario = c.id_funcionario
+                    ) AS idiomas
                 FROM airline.comissao_de_bordo c
                 LEFT JOIN airline.piloto p       ON p.id_funcionario = c.id_funcionario
                 LEFT JOIN airline.comissario com  ON com.id_funcionario = c.id_funcionario
@@ -92,6 +110,13 @@ class FuncionarioService:
 
         with connection.cursor() as cursor:
             cursor.execute(sql, params)
+            return _dictfetchall(cursor)
+
+    @staticmethod
+    def listar_idiomas() -> list[dict]:
+        """Lista todos os idiomas disponíveis para seleção."""
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT cod_idioma, nome FROM airline.idioma ORDER BY nome;")
             return _dictfetchall(cursor)
 
     @staticmethod
@@ -231,6 +256,21 @@ class FuncionarioService:
                             [dados["validade_certificado"], id_funcionario],
                         )
 
+                    # Substitui idiomas do comissário (DELETE + INSERT)
+                    if "idiomas" in dados:
+                        cursor.execute(
+                            "DELETE FROM airline.funcionario_idioma WHERE id_funcionario = %s;",
+                            [id_funcionario],
+                        )
+                        for item in (dados["idiomas"] or []):
+                            cod = item.get("cod_idioma")
+                            nivel = item.get("nivel_fluencia", "Nativo")
+                            if cod and nivel:
+                                cursor.execute(
+                                    "INSERT INTO airline.funcionario_idioma (id_funcionario, cod_idioma, nivel_fluencia) VALUES (%s, %s, %s);",
+                                    [id_funcionario, int(cod), nivel],
+                                )
+
         except (IntegrityError, DatabaseError) as e:
             cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
             diag  = getattr(cause, 'diag', None)
@@ -359,6 +399,14 @@ class FuncionarioService:
                             """,
                             [id_func, validade_cert],
                         )
+                        for item in dados.get('idiomas', []):
+                            cod = item.get('cod_idioma')
+                            nivel = item.get('nivel_fluencia', 'Nativo')
+                            if cod and nivel:
+                                cursor.execute(
+                                    "INSERT INTO airline.funcionario_idioma (id_funcionario, cod_idioma, nivel_fluencia) VALUES (%s, %s, %s);",
+                                    [id_func, int(cod), nivel],
+                                )
         except (IntegrityError, DatabaseError) as e:
             # Acessa o diagnóstico do psycopg3 para obter a mensagem limpa do gatilho
             cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)

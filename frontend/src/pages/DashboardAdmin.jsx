@@ -1057,9 +1057,50 @@ function PassageirosTab({ passageiros, loading, search, onSearch }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // Modal: Criar Funcionário (Piloto ou Comissário)
 // ══════════════════════════════════════════════════════════════════════════════
+const NIVEIS_FLUENCIA = ['Nativo', 'Avançado', 'Intermediário', 'Básico'];
+
+function SeletorIdiomas({ idiomasDisponiveis, selecionados, onChange }) {
+  const toggle = (cod_idioma) => {
+    const existe = selecionados.find((i) => i.cod_idioma === cod_idioma);
+    if (existe) {
+      onChange(selecionados.filter((i) => i.cod_idioma !== cod_idioma));
+    } else {
+      onChange([...selecionados, { cod_idioma, nivel_fluencia: 'Nativo' }]);
+    }
+  };
+  const setNivel = (cod_idioma, nivel_fluencia) => {
+    onChange(selecionados.map((i) => i.cod_idioma === cod_idioma ? { ...i, nivel_fluencia } : i));
+  };
+  return (
+    <div className="space-y-2">
+      {idiomasDisponiveis.map((idioma) => {
+        const sel = selecionados.find((i) => i.cod_idioma === idioma.cod_idioma);
+        return (
+          <div key={idioma.cod_idioma} className="flex items-center gap-2">
+            <button type="button" onClick={() => toggle(idioma.cod_idioma)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all min-w-[90px] text-left ${
+                sel ? 'bg-purple-600 text-white border-purple-600' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+              }`}>
+              {sel ? '✓ ' : ''}{idioma.nome}
+            </button>
+            {sel && (
+              <select value={sel.nivel_fluencia} onChange={(e) => setNivel(idioma.cod_idioma, e.target.value)}
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-400">
+                {NIVEIS_FLUENCIA.map((n) => <option key={n}>{n}</option>)}
+              </select>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CriarFuncionarioModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [idiomasDisponiveis, setIdiomasDisponiveis] = useState([]);
+  const [idiomasSelecionados, setIdiomasSelecionados] = useState([]);
   const [form, setForm] = useState({
     cargo: 'Piloto',
     nome_completo: '',
@@ -1071,6 +1112,10 @@ function CriarFuncionarioModal({ onClose, onSuccess }) {
     validade_certificado: '',
   });
 
+  useEffect(() => {
+    api.get('/admin/idiomas/').then(({ data }) => setIdiomasDisponiveis(data.idiomas || []));
+  }, []);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e) => {
@@ -1078,7 +1123,8 @@ function CriarFuncionarioModal({ onClose, onSuccess }) {
     setError('');
     setLoading(true);
     try {
-      await api.post('/admin/funcionarios/', form);
+      const payload = { ...form, ...(form.cargo === 'Comissário' ? { idiomas: idiomasSelecionados } : {}) };
+      await api.post('/admin/funcionarios/', payload);
       onSuccess();
       onClose();
     } catch (err) {
@@ -1175,6 +1221,14 @@ function CriarFuncionarioModal({ onClose, onSuccess }) {
                 <input type="date" value={form.validade_certificado} onChange={(e) => set('validade_certificado', e.target.value)}
                   required className={inputCls} />
               </div>
+              <div>
+                <label className={labelCls}>Idiomas</label>
+                <SeletorIdiomas
+                  idiomasDisponiveis={idiomasDisponiveis}
+                  selecionados={idiomasSelecionados}
+                  onChange={setIdiomasSelecionados}
+                />
+              </div>
             </div>
           )}
 
@@ -1205,6 +1259,10 @@ function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
   const isPiloto = funcionario.cargo === 'Piloto';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [idiomasDisponiveis, setIdiomasDisponiveis] = useState([]);
+  const [idiomasSelecionados, setIdiomasSelecionados] = useState(
+    (funcionario.idiomas || []).map((i) => ({ cod_idioma: i.cod_idioma, nivel_fluencia: i.nivel_fluencia }))
+  );
   const [form, setForm] = useState({
     nome_completo: funcionario.nome_completo || '',
     salario_base: funcionario.salario_base || '',
@@ -1212,6 +1270,12 @@ function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
     validade_habilitacao: funcionario.validade_certificado && isPiloto ? funcionario.validade_certificado : '',
     validade_certificado: !isPiloto ? (funcionario.validade_certificado || '') : '',
   });
+
+  useEffect(() => {
+    if (!isPiloto) {
+      api.get('/admin/idiomas/').then(({ data }) => setIdiomasDisponiveis(data.idiomas || []));
+    }
+  }, [isPiloto]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -1224,7 +1288,7 @@ function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
       salario_base: form.salario_base,
       ...(isPiloto
         ? { licenca_piloto: form.licenca_piloto, validade_habilitacao: form.validade_habilitacao }
-        : { validade_certificado: form.validade_certificado }),
+        : { validade_certificado: form.validade_certificado, idiomas: idiomasSelecionados }),
     };
     try {
       await api.patch(`/admin/funcionarios/${funcionario.id_funcionario}/`, payload);
@@ -1294,6 +1358,14 @@ function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
                 <input type="date" value={form.validade_certificado}
                   onChange={(e) => set('validade_certificado', e.target.value)}
                   className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Idiomas</label>
+                <SeletorIdiomas
+                  idiomasDisponiveis={idiomasDisponiveis}
+                  selecionados={idiomasSelecionados}
+                  onChange={setIdiomasSelecionados}
+                />
               </div>
             </div>
           )}
@@ -1413,7 +1485,7 @@ function TripulacaoTab() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100" style={{ backgroundColor: '#F8FAFC' }}>
-                      {['Nome', 'CPF', cor === 'blue' ? 'Licença' : 'Val. Certificado', 'Validade', 'Salário', 'Voos Escalados', ''].map((h) => (
+                      {['Nome', 'CPF', cor === 'blue' ? 'Licença' : 'Idiomas', 'Validade', 'Salário', 'Voos Escalados', ''].map((h) => (
                         <th key={h} className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1424,9 +1496,28 @@ function TripulacaoTab() {
                         <td className="px-5 py-4 font-semibold text-slate-800">{f.nome_completo}</td>
                         <td className="px-5 py-4 font-mono text-xs text-slate-500">{f.cpf}</td>
                         <td className="px-5 py-4">
-                          {f.licenca_piloto
-                            ? <span className="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">{f.licenca_piloto}</span>
-                            : <span className="text-slate-400 text-xs">—</span>}
+                          {cor === 'blue' ? (
+                            f.licenca_piloto
+                              ? <span className="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">{f.licenca_piloto}</span>
+                              : <span className="text-slate-400 text-xs">—</span>
+                          ) : (
+                            f.idiomas?.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {f.idiomas.slice(0, 2).map((id) => (
+                                  <span key={id.cod_idioma}
+                                    className="relative group text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-lg cursor-default select-none">
+                                    {id.nome}
+                                    <span className="absolute bottom-full left-0 mb-1 px-2 py-1 bg-slate-800 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                      {id.nivel_fluencia}
+                                    </span>
+                                  </span>
+                                ))}
+                                {f.idiomas.length > 2 && (
+                                  <span className="text-xs font-semibold text-slate-400 self-center">+{f.idiomas.length - 2}</span>
+                                )}
+                              </div>
+                            ) : <span className="text-slate-400 text-xs">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-4 text-slate-600 text-xs">{fmtDate(f.validade_certificado)}</td>
                         <td className="px-5 py-4 text-slate-700 text-xs font-semibold">{fmtCurrency(f.salario_base)}</td>

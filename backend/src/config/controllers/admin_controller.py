@@ -288,6 +288,15 @@ class ModeloAeronaveCreateView(APIView):
         return Response(resultado, status=status.HTTP_201_CREATED)
 
 
+class IdiomaListView(APIView):
+    """GET /api/admin/idiomas/ — Lista todos os idiomas disponíveis."""
+    permission_classes = [IsAdmin]
+
+    def get(self, _request):
+        idiomas = FuncionarioService.listar_idiomas()
+        return Response({"idiomas": idiomas}, status=status.HTTP_200_OK)
+
+
 class FuncionarioCreateView(APIView):
     """POST /api/admin/funcionarios/ — Cadastra piloto ou comissário."""
     permission_classes = [IsAdmin]
