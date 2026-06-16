@@ -1,10 +1,10 @@
-# reset.py — Limpa os dados operacionais preservando cidades e aeroportos
+# reset.py — Limpa os dados operacionais preservando cidades, aeroportos e idiomas
 import os
 import subprocess
 import psycopg
 from decouple import config
 
-# Tabelas operacionais a limpar, excluindo cidade e aeroporto (referência estática)
+# Tabelas operacionais a limpar, excluindo cidade, aeroporto e idioma (dados de referência estáticos)
 TRUNCATE_SQL = """
 TRUNCATE TABLE
     airline.controle_embarque,
@@ -16,7 +16,6 @@ TRUNCATE TABLE
     airline.piloto,
     airline.comissario,
     airline.comissao_de_bordo,
-    airline.idioma,
     airline.trecho,
     airline.voo,
     airline.aeronave,
@@ -64,7 +63,7 @@ def main():
 
     print("\n⚠️  AVISO: Esta ação vai APAGAR todos os dados operacionais do sistema")
     print("   (voos, aeronaves, passageiros, tripulação, reservas, etc.)")
-    print("   Cidades e aeroportos serão preservados.")
+    print("   Cidades, aeroportos e idiomas serão preservados.")
     print("   O login de administrador será removido.\n")
     confirmacao = input("   Digite 'sim' para confirmar: ").strip().lower()
     if confirmacao != "sim":
@@ -79,7 +78,7 @@ def main():
                 with conn.cursor() as cursor:
                     cursor.execute(TRUNCATE_SQL)
                 conn.commit()
-                print("  Dados operacionais removidos. Cidades e aeroportos preservados.")
+                print("  Dados operacionais removidos. Cidades, aeroportos e idiomas preservados.")
             else:
                 # Primeira execução — schema não existe ainda
                 path_create = os.path.join("database", "01_create.sql")
