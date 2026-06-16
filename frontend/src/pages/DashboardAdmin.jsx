@@ -1668,14 +1668,17 @@ function EmbarqueTab() {
   const handleAutorizar = async (id_controle) => {
     setActionLoading(id_controle);
     try {
-      await api.patch(`/admin/embarque/${id_controle}/autorizar/`);
-      setFeedback('Embarque autorizado com sucesso.');
+      const { data } = await api.patch(`/admin/embarque/${id_controle}/autorizar/`);
+      setFeedback(data.auto_negado
+        ? '⚠ Embarque negado automaticamente: pagamento não confirmado.'
+        : '✓ Embarque autorizado com sucesso.'
+      );
       await Promise.all([fetchEmbarques(filterVoo), fetchVoosPresenca(havingFiltro)]);
     } catch (err) {
       setFeedback(err.response?.data?.error || 'Erro ao autorizar.');
     } finally {
       setActionLoading(null);
-      setTimeout(() => setFeedback(''), 3000);
+      setTimeout(() => setFeedback(''), 4000);
     }
   };
 
@@ -1888,10 +1891,18 @@ function EmbarqueTab() {
                       <div className="flex flex-col gap-1.5">
                         {row.status_autorizacao === 'Pendente' && (
                           <div className="flex gap-2 whitespace-nowrap">
-                            <button onClick={() => handleAutorizar(row.id_controle_embarque)}
+                            <button
+                              onClick={() => handleAutorizar(row.id_controle_embarque)}
                               disabled={actionLoading === row.id_controle_embarque}
-                              className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors">
-                              {actionLoading === row.id_controle_embarque ? '...' : '✓ Autorizar'}
+                              title={row.status_pagamento === 'Pendente' ? 'Pagamento não confirmado — será negado automaticamente' : 'Autorizar embarque'}
+                              className={`text-xs font-semibold disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors ${
+                                row.status_pagamento === 'Pendente'
+                                  ? 'bg-orange-500 hover:bg-orange-600'
+                                  : 'bg-emerald-600 hover:bg-emerald-700'
+                              }`}>
+                              {actionLoading === row.id_controle_embarque
+                                ? '...'
+                                : row.status_pagamento === 'Pendente' ? '⚠ Autorizar' : '✓ Autorizar'}
                             </button>
                             <button onClick={() => setDenialTarget({ id_controle: row.id_controle_embarque, nome_passageiro: row.nome_passageiro })}
                               disabled={actionLoading === row.id_controle_embarque}
