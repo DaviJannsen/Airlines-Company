@@ -1938,6 +1938,185 @@ function EmbarqueTab() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Tab: Relatórios
+// ══════════════════════════════════════════════════════════════════════════════
+function RelatoriosTab() {
+  const [subTab, setSubTab] = useState('painel');
+  const [dados, setDados] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchRelatorio = useCallback(async (tipo) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/relatorios/', { params: { tipo } });
+      setDados(data.dados || []);
+    } catch {
+      setDados([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRelatorio(subTab); }, [subTab, fetchRelatorio]);
+
+  const SUB_TABS = [
+    { key: 'painel',  label: 'Painel de Voos',    sql: 'VIEW · JOIN · GROUP BY · COUNT' },
+    { key: 'receita', label: 'Receita por Classe', sql: 'JOIN · GROUP BY · COUNT · SUM · AVG · HAVING' },
+  ];
+
+  const fmt = (val) =>
+    val == null ? '—' : Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  return (
+    <div>
+      {/* Sub-tabs */}
+      <div className="flex gap-3 mb-6 flex-wrap">
+        {SUB_TABS.map((t) => (
+          <button key={t.key} onClick={() => setSubTab(t.key)}
+            className={`flex flex-col items-start px-5 py-3 rounded-xl text-sm font-semibold border transition-all ${
+              subTab === t.key
+                ? 'text-white border-transparent'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+            }`}
+            style={subTab === t.key ? { background: '#0F2044' } : {}}>
+            {t.label}
+            <span className={`text-xs font-mono mt-0.5 ${subTab === t.key ? 'text-blue-300' : 'text-slate-400'}`}>
+              {t.sql}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Painel de Voos (vw_painel_voos) ── */}
+      {subTab === 'painel' && (
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+            <div>
+              <h3 className="font-bold text-slate-800">Painel de Voos</h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">SELECT * FROM airline.vw_painel_voos</p>
+            </div>
+            <span className="ml-auto text-xs bg-blue-50 text-blue-700 font-semibold px-3 py-1 rounded-full">
+              {dados.length} voos
+            </span>
+          </div>
+          {loading ? (
+            <TableSkeleton rows={5} cols={8} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left">Voo</th>
+                    <th className="px-4 py-3 text-left">Rota</th>
+                    <th className="px-4 py-3 text-left">Data</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Aeronave</th>
+                    <th className="px-4 py-3 text-right">Cap.</th>
+                    <th className="px-4 py-3 text-right bg-amber-50 text-amber-700">Passagens</th>
+                    <th className="px-4 py-3 text-right bg-purple-50 text-purple-700">Tripulação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados.length === 0 ? (
+                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400 text-sm">Nenhum dado encontrado.</td></tr>
+                  ) : dados.map((r) => {
+                    const lotacao = r.capacidade_maxima > 0
+                      ? Math.round((r.passagens_vendidas / r.capacidade_maxima) * 100) : 0;
+                    return (
+                      <tr key={r.num_voo} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-slate-800">{r.num_voo}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          <span className="font-semibold">{r.origem}</span>
+                          <span className="text-slate-400 mx-1">→</span>
+                          <span className="font-semibold">{r.destino}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{r.data_partida}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            r.status_voo === 'Programado' ? 'bg-blue-50 text-blue-700' :
+                            r.status_voo === 'Em Voo'    ? 'bg-green-50 text-green-700' :
+                            r.status_voo === 'Concluído' ? 'bg-slate-100 text-slate-600' :
+                            r.status_voo === 'Cancelado' ? 'bg-red-50 text-red-600' :
+                            'bg-yellow-50 text-yellow-700'
+                          }`}>{r.status_voo}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{r.modelo_aeronave}</td>
+                        <td className="px-4 py-3 text-right text-slate-500">{r.capacidade_maxima}</td>
+                        <td className="px-4 py-3 text-right bg-amber-50">
+                          <span className="font-bold text-amber-700">{r.passagens_vendidas}</span>
+                          <span className="text-amber-400 text-xs ml-1">({lotacao}%)</span>
+                        </td>
+                        <td className="px-4 py-3 text-right bg-purple-50">
+                          <span className="font-bold text-purple-700">{r.tripulacao_escalada}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Receita por Classe (GROUP BY + HAVING) ── */}
+      {subTab === 'receita' && (
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="font-bold text-slate-800">Receita por Classe de Cabine</h3>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">
+              GROUP BY num_voo, classe_cabine &nbsp;·&nbsp; HAVING COUNT(passagens) &gt;= 1
+            </p>
+          </div>
+          {loading ? (
+            <TableSkeleton rows={5} cols={6} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left">Voo</th>
+                    <th className="px-4 py-3 text-left">Rota</th>
+                    <th className="px-4 py-3 text-left">Classe</th>
+                    <th className="px-4 py-3 text-right bg-amber-50 text-amber-700">Passagens (COUNT)</th>
+                    <th className="px-4 py-3 text-right bg-green-50 text-green-700">Receita (SUM)</th>
+                    <th className="px-4 py-3 text-right bg-blue-50 text-blue-700">Ticket Médio (AVG)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400 text-sm">Nenhum dado encontrado.</td></tr>
+                  ) : dados.map((r, i) => (
+                    <tr key={i} className="border-t border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-slate-800">{r.num_voo}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className="font-semibold">{r.origem}</span>
+                        <span className="text-slate-400 mx-1">→</span>
+                        <span className="font-semibold">{r.destino}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          r.classe_cabine === 'Primeira Classe' ? 'bg-yellow-50 text-yellow-700' :
+                          r.classe_cabine === 'Executiva'       ? 'bg-purple-50 text-purple-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{r.classe_cabine}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right bg-amber-50 font-bold text-amber-700">{r.qtd_passagens}</td>
+                      <td className="px-4 py-3 text-right bg-green-50 font-bold text-green-700">{fmt(r.receita_total)}</td>
+                      <td className="px-4 py-3 text-right bg-blue-50 font-bold text-blue-700">{fmt(r.ticket_medio)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Page: DashboardAdmin
 // ══════════════════════════════════════════════════════════════════════════════
 export default function DashboardAdmin() {
@@ -1996,6 +2175,7 @@ export default function DashboardAdmin() {
     { key: 'passageiros',label: '👤 Passageiros',           count: passageirosTotal },
     { key: 'tripulacao', label: '🧑‍✈️ Tripulação',           count: null },
     { key: 'embarque',   label: '🚪 Controle de Embarque',  count: null },
+    { key: 'relatorios', label: '📊 Relatórios',            count: null },
   ];
 
   return (
@@ -2066,6 +2246,7 @@ export default function DashboardAdmin() {
         )}
         {tab === 'tripulacao' && <TripulacaoTab />}
         {tab === 'embarque'   && <EmbarqueTab />}
+        {tab === 'relatorios' && <RelatoriosTab />}
       </div>
     </div>
   );

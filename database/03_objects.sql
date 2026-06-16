@@ -67,7 +67,7 @@ GROUP BY da.num_voo, p.classe_cabine;
 -- Um índice composto em (data_partida, status_voo) evita
 -- full-scans na tabela Voo para estas consultas recorrentes.
 -- ============================================================
-CREATE INDEX idx_voo_data_status
+CREATE INDEX IF NOT EXISTS idx_voo_data_status
     ON Voo (data_partida, status_voo);
 
 -- ============================================================
@@ -76,7 +76,7 @@ CREATE INDEX idx_voo_data_status
 -- percorrem a tabela Passagem filtrando por id_passageiro.
 -- O índice acelera essas consultas sem necessidade de seq scan.
 -- ============================================================
-CREATE INDEX idx_passagem_passageiro
+CREATE INDEX IF NOT EXISTS idx_passagem_passageiro
     ON Passagem (id_passageiro);
 
 -- ============================================================
@@ -85,7 +85,7 @@ CREATE INDEX idx_passagem_passageiro
 -- junto com Voo via JOIN por num_voo; o índice elimina buscas
 -- sequenciais nessa coluna de FK.
 -- ============================================================
-CREATE INDEX idx_trecho_voo
+CREATE INDEX IF NOT EXISTS idx_trecho_voo
     ON Trecho (num_voo);
 
 -- ============================================================
@@ -112,7 +112,7 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_valida_habilitacao_piloto
+CREATE OR REPLACE TRIGGER trg_valida_habilitacao_piloto
 BEFORE INSERT OR UPDATE ON Piloto
 FOR EACH ROW
 EXECUTE FUNCTION fn_valida_habilitacao_piloto();
@@ -141,7 +141,7 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_atualiza_aviso_manutencao
+CREATE OR REPLACE TRIGGER trg_atualiza_aviso_manutencao
 BEFORE INSERT OR UPDATE OF data_ultima_manutencao ON Aeronave
 FOR EACH ROW
 EXECUTE FUNCTION fn_atualiza_aviso_manutencao();
@@ -168,7 +168,7 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_log_cancelamento_voo
+CREATE OR REPLACE TRIGGER trg_log_cancelamento_voo
 BEFORE UPDATE OF status_voo ON Voo
 FOR EACH ROW
 EXECUTE FUNCTION fn_log_cancelamento_voo();

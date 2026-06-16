@@ -426,3 +426,54 @@ class VooService:
                     )
 
         return {"message": "Voo criado com sucesso.", "num_voo": num_voo_criado}
+
+    @staticmethod
+    def relatorio_painel_voos() -> list[dict]:
+        """Consulta a view vw_painel_voos — VIEW + JOIN + GROUP BY + COUNT."""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    num_voo,
+                    tipo_voo,
+                    data_partida::TEXT     AS data_partida,
+                    hora_partida::TEXT     AS hora_partida,
+                    status_voo,
+                    origem,
+                    destino,
+                    distancia_km,
+                    modelo_aeronave,
+                    capacidade_maxima,
+                    passagens_vendidas,
+                    tripulacao_escalada
+                FROM airline.vw_painel_voos
+                ORDER BY data_partida ASC, hora_partida ASC;
+            """)
+            return _dictfetchall(cursor)
+
+    @staticmethod
+    def relatorio_receita_por_classe() -> list[dict]:
+        """
+        Receita e ocupação por classe de cabine por voo.
+        Demonstra: JOIN × 4 tabelas · GROUP BY · COUNT · SUM · AVG · HAVING.
+        """
+        sql = """
+            SELECT
+                da.num_voo,
+                t.codigo_IATA_origem              AS origem,
+                t.codigo_IATA_destino             AS destino,
+                p.classe_cabine,
+                COUNT(p.id_passagem)              AS qtd_passagens,
+                SUM(r.valor_total)::NUMERIC        AS receita_total,
+                ROUND(AVG(r.valor_total), 2)::NUMERIC AS ticket_medio
+            FROM airline.passagem p
+            INNER JOIN airline.destinado_a da ON da.id_passagem = p.id_passagem
+            INNER JOIN airline.voo v          ON v.num_voo = da.num_voo
+            INNER JOIN airline.trecho t       ON t.num_voo = v.num_voo
+            INNER JOIN airline.reserva r      ON r.codigo_localizador = p.codigo_localizador
+            GROUP BY da.num_voo, t.codigo_IATA_origem, t.codigo_IATA_destino, p.classe_cabine
+            HAVING COUNT(p.id_passagem) >= 1
+            ORDER BY receita_total DESC, da.num_voo ASC;
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            return _dictfetchall(cursor)
