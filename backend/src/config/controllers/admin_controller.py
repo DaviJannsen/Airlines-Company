@@ -149,7 +149,8 @@ class ComissaoListView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        funcionarios = FuncionarioService.listar_comissao()
+        busca = request.query_params.get("busca", "")
+        funcionarios = FuncionarioService.listar_comissao(busca=busca)
         return Response({"funcionarios": funcionarios, "total": len(funcionarios)}, status=status.HTTP_200_OK)
 
 
@@ -221,6 +222,20 @@ class EmbarqueListView(APIView):
         return Response({"embarques": embarques, "total": len(embarques)}, status=status.HTTP_200_OK)
 
 
+class VoosComPresencaView(APIView):
+    """
+    GET /api/admin/embarque/voos-com-presenca/?filtro=<opcao>
+    Agrega controle_embarque por voo com GROUP BY + HAVING.
+    filtro: presentes | embarque_pendente | pag_pendente
+    """
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        filtro = request.query_params.get("filtro", "presentes")
+        voos = PassageiroService.resumo_embarque_por_voo(filtro=filtro)
+        return Response({"voos": voos, "total": len(voos), "filtro": filtro}, status=status.HTTP_200_OK)
+
+
 class AutorizarEmbarqueView(APIView):
     """PATCH /api/admin/embarque/<id_controle>/autorizar/"""
     permission_classes = [IsAdmin]
@@ -280,3 +295,16 @@ class FuncionarioCreateView(APIView):
         if resultado.get("error"):
             return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
         return Response(resultado, status=status.HTTP_201_CREATED)
+
+
+class FuncionarioUpdateView(APIView):
+    """PATCH /api/admin/funcionarios/<id_funcionario>/ — Atualiza dados de um funcionário."""
+    permission_classes = [IsAdmin]
+
+    def patch(self, _request, id_funcionario):
+        resultado = FuncionarioService.atualizar_funcionario(
+            id_funcionario=id_funcionario, dados=_request.data
+        )
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_200_OK)

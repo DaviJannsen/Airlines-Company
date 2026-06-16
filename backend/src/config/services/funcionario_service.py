@@ -4,7 +4,7 @@ Airlines Company — Service de Funcionários (Comissão de Bordo)
 Gerencia pilotos, comissários e escala de trabalho.
 """
 import re
-from django.db import connection, transaction as db_transaction
+from django.db import connection, transaction as db_transaction, DatabaseError, IntegrityError
 
 
 def _dictfetchall(cursor) -> list[dict]:
@@ -15,10 +15,11 @@ def _dictfetchall(cursor) -> list[dict]:
 class FuncionarioService:
 
     @staticmethod
-    def listar_comissao(num_voo: str = None) -> list[dict]:
+    def listar_comissao(num_voo: str = None, busca: str = "") -> list[dict]:
         """
         Lista todos os membros da comissão de bordo.
         Se num_voo for fornecido, inclui flag 'escalado_neste_voo'.
+        Se busca for fornecido, filtra por nome_completo ou CPF via ILIKE.
         """
         if num_voo:
             sql = """
@@ -42,11 +43,17 @@ class FuncionarioService:
                 LEFT JOIN airline.comissario com  ON com.id_funcionario = c.id_funcionario
                 LEFT JOIN airline.escala_trabalho et
                     ON et.id_funcionario = c.id_funcionario AND et.num_voo = %s
+                WHERE 1=1
+            """
+            params = [num_voo]
+            if busca:
+                sql += " AND (c.nome_completo ILIKE %s OR c.cpf ILIKE %s)"
+                params.extend([f"%{busca}%", f"%{busca}%"])
+            sql += """
                 ORDER BY
                     CASE WHEN p.id_funcionario IS NOT NULL THEN 0 ELSE 1 END,
                     c.nome_completo ASC;
             """
-            params = [num_voo]
         else:
             sql = """
                 SELECT
@@ -71,11 +78,17 @@ class FuncionarioService:
                 FROM airline.comissao_de_bordo c
                 LEFT JOIN airline.piloto p       ON p.id_funcionario = c.id_funcionario
                 LEFT JOIN airline.comissario com  ON com.id_funcionario = c.id_funcionario
+                WHERE 1=1
+            """
+            params = []
+            if busca:
+                sql += " AND (c.nome_completo ILIKE %s OR c.cpf ILIKE %s)"
+                params.extend([f"%{busca}%", f"%{busca}%"])
+            sql += """
                 ORDER BY
                     CASE WHEN p.id_funcionario IS NOT NULL THEN 0 ELSE 1 END,
                     c.nome_completo ASC;
             """
-            params = []
 
         with connection.cursor() as cursor:
             cursor.execute(sql, params)
@@ -170,6 +183,67 @@ class FuncionarioService:
         }
 
     @staticmethod
+    def atualizar_funcionario(id_funcionario: int, dados: dict) -> dict:
+        """
+        Atualiza dados de comissao_de_bordo e da subclasse (piloto ou comissario).
+        O trigger trg_valida_habilitacao_piloto dispara se a validade for passada.
+        """
+        try:
+            with db_transaction.atomic():
+                with connection.cursor() as cursor:
+                    # Campos base atualizáveis
+                    base_campos = {}
+                    if "nome_completo" in dados and dados["nome_completo"].strip():
+                        base_campos["nome_completo"] = dados["nome_completo"].strip()
+                    if "salario_base" in dados:
+                        try:
+                            base_campos["salario_base"] = float(dados["salario_base"])
+                        except (ValueError, TypeError):
+                            return {"error": "Salário inválido."}
+
+                    if base_campos:
+                        sets = ", ".join(f"{col} = %s" for col in base_campos)
+                        cursor.execute(
+                            f"UPDATE airline.comissao_de_bordo SET {sets} WHERE id_funcionario = %s RETURNING id_funcionario;",
+                            list(base_campos.values()) + [id_funcionario],
+                        )
+                        if not cursor.fetchone():
+                            return {"error": "Funcionário não encontrado."}
+
+                    # Atualiza subclasse piloto
+                    if "licenca_piloto" in dados or "validade_habilitacao" in dados:
+                        piloto_campos = {}
+                        if "licenca_piloto" in dados and dados["licenca_piloto"].strip():
+                            piloto_campos["licenca_piloto"] = dados["licenca_piloto"].strip()
+                        if "validade_habilitacao" in dados and dados["validade_habilitacao"]:
+                            piloto_campos["validade_habilitacao"] = dados["validade_habilitacao"]
+                        if piloto_campos:
+                            sets = ", ".join(f"{col} = %s" for col in piloto_campos)
+                            cursor.execute(
+                                f"UPDATE airline.piloto SET {sets} WHERE id_funcionario = %s;",
+                                list(piloto_campos.values()) + [id_funcionario],
+                            )
+
+                    # Atualiza subclasse comissario
+                    if "validade_certificado" in dados and dados["validade_certificado"]:
+                        cursor.execute(
+                            "UPDATE airline.comissario SET validade_certificado = %s WHERE id_funcionario = %s;",
+                            [dados["validade_certificado"], id_funcionario],
+                        )
+
+        except (IntegrityError, DatabaseError) as e:
+            cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
+            diag  = getattr(cause, 'diag', None)
+            msg   = (
+                getattr(diag, 'message_primary', None)
+                or (e.args[0] if e.args else None)
+                or str(e)
+            )
+            return {'error': str(msg).splitlines()[0] or 'Erro no banco de dados.'}
+
+        return {"message": "Funcionário atualizado com sucesso.", "id_funcionario": id_funcionario}
+
+    @staticmethod
     def criar_funcionario(dados: dict) -> dict:
         """
         Cria um Piloto ou Comissário.
@@ -206,43 +280,54 @@ class FuncionarioService:
             if not validade_cert:
                 return {'error': 'Validade do certificado é obrigatória para Comissário.'}
 
-        with db_transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM airline.comissao_de_bordo WHERE cpf = %s LIMIT 1;", [cpf]
-                )
-                if cursor.fetchone():
-                    return {'error': f"CPF '{cpf}' já está cadastrado."}
+        try:
+            with db_transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT 1 FROM airline.comissao_de_bordo WHERE cpf = %s LIMIT 1;", [cpf]
+                    )
+                    if cursor.fetchone():
+                        return {'error': f"CPF '{cpf}' já está cadastrado."}
 
-                cursor.execute(
-                    """
-                    INSERT INTO airline.comissao_de_bordo
-                        (cpf, nome_completo, data_admissao, salario_base)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id_funcionario;
-                    """,
-                    [cpf, nome_completo, data_admissao, salario_base],
-                )
-                id_func = cursor.fetchone()[0]
-
-                if cargo == 'Piloto':
                     cursor.execute(
                         """
-                        INSERT INTO airline.piloto
-                            (id_funcionario, licenca_piloto, validade_habilitacao)
-                        VALUES (%s, %s, %s);
+                        INSERT INTO airline.comissao_de_bordo
+                            (cpf, nome_completo, data_admissao, salario_base)
+                        VALUES (%s, %s, %s, %s)
+                        RETURNING id_funcionario;
                         """,
-                        [id_func, licenca, validade_hab],
+                        [cpf, nome_completo, data_admissao, salario_base],
                     )
-                else:
-                    cursor.execute(
-                        """
-                        INSERT INTO airline.comissario
-                            (id_funcionario, validade_certificado)
-                        VALUES (%s, %s);
-                        """,
-                        [id_func, validade_cert],
-                    )
+                    id_func = cursor.fetchone()[0]
+
+                    if cargo == 'Piloto':
+                        cursor.execute(
+                            """
+                            INSERT INTO airline.piloto
+                                (id_funcionario, licenca_piloto, validade_habilitacao)
+                            VALUES (%s, %s, %s);
+                            """,
+                            [id_func, licenca, validade_hab],
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO airline.comissario
+                                (id_funcionario, validade_certificado)
+                            VALUES (%s, %s);
+                            """,
+                            [id_func, validade_cert],
+                        )
+        except (IntegrityError, DatabaseError) as e:
+            # Acessa o diagnóstico do psycopg3 para obter a mensagem limpa do gatilho
+            cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
+            diag  = getattr(cause, 'diag', None)
+            msg   = (
+                getattr(diag, 'message_primary', None)
+                or (e.args[0] if e.args else None)
+                or str(e)
+            )
+            return {'error': str(msg).splitlines()[0] or 'Erro de integridade no banco de dados.'}
 
         return {
             'id_funcionario': id_func,

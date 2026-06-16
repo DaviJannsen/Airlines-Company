@@ -367,6 +367,108 @@ class PassageiroService:
         return {"message": "Embarque negado.", "id_controle_embarque": id_controle}
 
     @staticmethod
+    def atualizar_perfil(id_passageiro: int, dados: dict) -> dict:
+        """Atualiza dados pessoais do passageiro autenticado."""
+        campos = {}
+        if "nome_completo" in dados and dados["nome_completo"].strip():
+            campos["nome_completo"] = dados["nome_completo"].strip()
+        if "data_nascimento" in dados:
+            campos["data_nascimento"] = dados["data_nascimento"] or None
+        if "contato_emergencia" in dados:
+            campos["contato_emergencia"] = dados["contato_emergencia"].strip() or None
+        if "necessidades_especiais" in dados:
+            campos["necessidades_especiais"] = bool(dados["necessidades_especiais"])
+
+        if not campos:
+            return {"error": "Nenhum campo fornecido para atualização."}
+
+        sets = ", ".join(f"{col} = %s" for col in campos)
+        valores = list(campos.values()) + [id_passageiro]
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"UPDATE airline.passageiro SET {sets} WHERE id_passageiro = %s RETURNING id_passageiro;",
+                valores,
+            )
+            if not cursor.fetchone():
+                return {"error": "Passageiro não encontrado."}
+
+        return {"message": "Perfil atualizado com sucesso."}
+
+    @staticmethod
+    def buscar_perfil(id_passageiro: int) -> dict | None:
+        """Retorna dados do perfil do passageiro."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id_passageiro, nome_completo, data_nascimento::TEXT,
+                       documento_identidade, contato_emergencia, necessidades_especiais
+                FROM airline.passageiro
+                WHERE id_passageiro = %s LIMIT 1;
+                """,
+                [id_passageiro],
+            )
+            columns = [col[0] for col in cursor.description]
+            row = cursor.fetchone()
+            return dict(zip(columns, row)) if row else None
+
+    @staticmethod
+    def resumo_embarque_por_voo(filtro: str = "presentes") -> list[dict]:
+        """
+        Agrega controle_embarque por voo (GROUP BY) e filtra com HAVING.
+        filtro:
+          'presentes'        → voos com >= 1 passageiro Presente no gate
+          'embarque_pendente'→ voos com >= 1 autorização Pendente
+          'pag_pendente'     → voos com >= 1 pagamento Pendente
+        """
+        HAVING_MAP = {
+            "presentes":
+                "COUNT(ce.id_passagem) FILTER (WHERE ce.status_presenca_passageiro = 'Presente') > 0",
+            "embarque_pendente":
+                "COUNT(ce.id_passagem) FILTER (WHERE ce.status_autorizacao = 'Pendente') > 0",
+            "pag_pendente":
+                "COUNT(p.id_passagem)  FILTER (WHERE r.status_pagamento = 'Pendente') > 0",
+        }
+        having_clause = HAVING_MAP.get(filtro, HAVING_MAP["presentes"])
+
+        sql = f"""
+            SELECT
+                ce.num_voo,
+                c_orig.nome_cidade                                                                 AS cidade_origem,
+                c_dest.nome_cidade                                                                 AS cidade_destino,
+                v.data_partida::TEXT                                                               AS data_partida,
+                v.hora_partida::TEXT                                                               AS hora_partida,
+                v.status_voo,
+                COUNT(ce.id_passagem)                                                              AS total_passageiros,
+                COUNT(ce.id_passagem) FILTER (WHERE ce.status_presenca_passageiro = 'Presente')   AS presentes,
+                COUNT(ce.id_passagem) FILTER (WHERE ce.status_autorizacao = 'Pendente')           AS embarque_pendente,
+                COUNT(p.id_passagem)  FILTER (WHERE r.status_pagamento = 'Pendente')              AS pag_pendente
+            FROM airline.controle_embarque ce
+            INNER JOIN airline.passagem p    ON p.id_passagem = ce.id_passagem
+            INNER JOIN airline.reserva r     ON r.codigo_localizador = p.codigo_localizador
+            INNER JOIN airline.voo v         ON v.num_voo = ce.num_voo
+            INNER JOIN LATERAL (
+                SELECT codigo_IATA_origem, codigo_IATA_destino
+                FROM airline.trecho
+                WHERE num_voo = v.num_voo
+                ORDER BY codigo_trecho
+                LIMIT 1
+            ) t ON TRUE
+            INNER JOIN airline.aeroporto ao  ON ao.codigo_IATA = t.codigo_IATA_origem
+            INNER JOIN airline.cidade c_orig ON c_orig.id_cidade = ao.id_cidade
+            INNER JOIN airline.aeroporto ad  ON ad.codigo_IATA = t.codigo_IATA_destino
+            INNER JOIN airline.cidade c_dest ON c_dest.id_cidade = ad.id_cidade
+            GROUP BY
+                ce.num_voo, c_orig.nome_cidade, c_dest.nome_cidade,
+                v.data_partida, v.hora_partida, v.status_voo
+            HAVING {having_clause}
+            ORDER BY total_passageiros DESC, v.data_partida ASC;
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            return _dictfetchall(cursor)
+
+    @staticmethod
     def confirmar_pagamento(id_controle: int) -> dict:
         """Marca status_pagamento = 'Pago' na reserva vinculada ao controle de embarque."""
         with connection.cursor() as cursor:
