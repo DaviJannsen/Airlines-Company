@@ -1257,6 +1257,7 @@ function CriarFuncionarioModal({ onClose, onSuccess }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
   const isPiloto = funcionario.cargo === 'Piloto';
+  const toDateStr = (val) => (val ? String(val).slice(0, 10) : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [idiomasDisponiveis, setIdiomasDisponiveis] = useState([]);
@@ -1267,8 +1268,8 @@ function EditarFuncionarioModal({ funcionario, onClose, onSuccess }) {
     nome_completo: funcionario.nome_completo || '',
     salario_base: funcionario.salario_base || '',
     licenca_piloto: funcionario.licenca_piloto || '',
-    validade_habilitacao: funcionario.validade_certificado && isPiloto ? funcionario.validade_certificado : '',
-    validade_certificado: !isPiloto ? (funcionario.validade_certificado || '') : '',
+    validade_habilitacao: isPiloto ? toDateStr(funcionario.validade_certificado) : '',
+    validade_certificado: !isPiloto ? toDateStr(funcionario.validade_certificado) : '',
   });
 
   useEffect(() => {
