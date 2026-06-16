@@ -612,6 +612,11 @@ function FlightDetailModal({ numVoo, onClose }) {
                 {fmtDate(voo.data_partida)} às {fmtTime(voo.hora_partida)}
               </p>
             )}
+            {voo?.status_voo === 'Cancelado' && voo?.data_hora_cancelamento && (
+              <p className="text-red-300 text-xs mt-0.5">
+                ⚠ Cancelado em: {new Date(voo.data_hora_cancelamento).toLocaleString('pt-BR')}
+              </p>
+            )}
           </div>
           <button onClick={onClose} className="text-white/60 hover:text-white text-2xl leading-none">×</button>
         </div>
@@ -806,12 +811,19 @@ const STATUS_ACOES = {
 // ══════════════════════════════════════════════════════════════════════════════
 // Tab: Voos (com Criar Voo + Detalhes + Gerenciar Status)
 // ══════════════════════════════════════════════════════════════════════════════
-function VoosTab({ voos, loading, onVooCreated }) {
+function VoosTab({ voos, loading, onVooCreated, onSearch }) {
   const [showCriar, setShowCriar] = useState(false);
   const [detailVoo, setDetailVoo] = useState(null);
   const [statusLoading, setStatusLoading] = useState(null);
   const [feedback, setFeedback] = useState('');
   const [search, setSearch] = useState('');
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    const t = setTimeout(() => onSearch(search), search ? 400 : 0);
+    return () => clearTimeout(t);
+  }, [search, onSearch]);
 
   const handleStatus = async (num_voo, novoStatus) => {
     setStatusLoading(num_voo + novoStatus);
@@ -826,10 +838,6 @@ function VoosTab({ voos, loading, onVooCreated }) {
       setTimeout(() => setFeedback(''), 4000);
     }
   };
-
-  const voosFiltrados = search.trim()
-    ? voos.filter((v) => v.num_voo.toUpperCase().includes(search.trim().toUpperCase()))
-    : voos;
 
   return (
     <div>
@@ -846,7 +854,7 @@ function VoosTab({ voos, loading, onVooCreated }) {
         </div>
         <div className="flex items-center gap-3">
           <p className="text-sm text-slate-500 whitespace-nowrap">
-            {voosFiltrados.length}/{voos.length} voo(s)
+            {voos.length} voo(s)
           </p>
           <button
             onClick={() => setShowCriar(true)}
@@ -878,7 +886,7 @@ function VoosTab({ voos, loading, onVooCreated }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {voosFiltrados.map((voo) => {
+                {voos.map((voo) => {
                   const st = VOO_STATUS_STYLE[voo.status_voo] || VOO_STATUS_STYLE.Programado;
                   const chegada = voo.previsao_chegada
                     ? new Date(voo.previsao_chegada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -929,6 +937,13 @@ function VoosTab({ voos, loading, onVooCreated }) {
                           <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
                           {voo.status_voo}
                         </span>
+                        {voo.status_voo === 'Cancelado' && voo.data_hora_cancelamento && (
+                          <p className="text-xs text-red-500 mt-0.5 whitespace-nowrap">
+                            {new Date(voo.data_hora_cancelamento).toLocaleString('pt-BR', {
+                              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                            })}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-4 font-mono text-xs text-slate-500">{voo.cod_aeronave}</td>
                       <td className="px-4 py-4">
@@ -951,7 +966,7 @@ function VoosTab({ voos, loading, onVooCreated }) {
                     </tr>
                   );
                 })}
-                {voosFiltrados.length === 0 && !loading && (
+                {voos.length === 0 && !loading && (
                   <tr><td colSpan={9} className="px-5 py-16 text-center text-slate-400">
                     {search.trim() ? `Nenhum voo encontrado para "${search.trim().toUpperCase()}".` : 'Nenhum voo cadastrado.'}
                   </td></tr>
@@ -1303,6 +1318,9 @@ function TripulacaoTab() {
   const [loading, setLoading] = useState(true);
   const [showCriar, setShowCriar] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteFeedback, setDeleteFeedback] = useState('');
   const [search, setSearch] = useState('');
 
   const fetchFuncionarios = useCallback((busca = '') => {
@@ -1320,11 +1338,38 @@ function TripulacaoTab() {
     return () => clearTimeout(t);
   }, [search, fetchFuncionarios]);
 
+  const handleDeletar = async (id_funcionario) => {
+    setDeleteLoading(true);
+    try {
+      await api.delete(`/admin/funcionarios/${id_funcionario}/`);
+      setConfirmDelete(null);
+      setDeleteFeedback('Funcionário excluído com sucesso.');
+      fetchFuncionarios(search);
+      setTimeout(() => setDeleteFeedback(''), 4000);
+    } catch (err) {
+      setDeleteFeedback(err.response?.data?.error || 'Erro ao excluir funcionário.');
+      setConfirmDelete(null);
+      setTimeout(() => setDeleteFeedback(''), 5000);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const pilotos = funcionarios.filter((f) => f.cargo === 'Piloto');
   const comissarios = funcionarios.filter((f) => f.cargo === 'Comissário');
 
   return (
     <div className="space-y-6">
+      {deleteFeedback && (
+        <div className={`text-sm rounded-2xl px-5 py-3 mb-2 font-medium border ${
+          deleteFeedback.includes('sucesso')
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          {deleteFeedback}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
         <div className="relative flex-1 max-w-sm">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
@@ -1383,11 +1428,36 @@ function TripulacaoTab() {
                           }`}>{f.total_voos}</span>
                         </td>
                         <td className="px-5 py-4">
-                          <button
-                            onClick={() => setEditando(f)}
-                            className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">
-                            Editar
-                          </button>
+                          {confirmDelete === f.id_funcionario ? (
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <span className="text-xs text-red-700 font-semibold">Excluir?</span>
+                              <button
+                                onClick={() => handleDeletar(f.id_funcionario)}
+                                disabled={deleteLoading}
+                                className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 px-2.5 py-1 rounded-lg transition-colors">
+                                Sim
+                              </button>
+                              <button
+                                onClick={() => setConfirmDelete(null)}
+                                disabled={deleteLoading}
+                                className="text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 px-2.5 py-1 rounded-lg transition-colors">
+                                Não
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setEditando(f)}
+                                className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => setConfirmDelete(f.id_funcionario)}
+                                className="text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors">
+                                Excluir
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1785,10 +1855,10 @@ export default function DashboardAdmin() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
 
-  const fetchVoos = useCallback(async () => {
+  const fetchVoos = useCallback(async (busca = '') => {
     setVoosLoading(true);
     try {
-      const { data } = await api.get('/admin/voos/');
+      const { data } = await api.get('/admin/voos/', { params: busca ? { busca } : {} });
       setVoos(data.voos || []);
       setVoosTotal(data.total || 0);
     } catch {
@@ -1880,7 +1950,12 @@ export default function DashboardAdmin() {
         </div>
 
         {tab === 'voos' && (
-          <VoosTab voos={voos} loading={voosLoading} onVooCreated={fetchVoos} />
+          <VoosTab
+            voos={voos}
+            loading={voosLoading}
+            onVooCreated={() => fetchVoos()}
+            onSearch={(busca) => fetchVoos(busca)}
+          />
         )}
         {tab === 'passageiros' && (
           <PassageirosTab

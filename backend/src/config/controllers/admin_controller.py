@@ -85,7 +85,9 @@ class AdminVooListCreateView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        voos = VooService.listar_voos(filtros={})
+        busca = request.query_params.get("busca", "").strip()
+        filtros = {"busca": busca} if busca else {}
+        voos = VooService.listar_voos(filtros=filtros)
         return Response({"voos": voos, "total": len(voos)}, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -305,6 +307,12 @@ class FuncionarioUpdateView(APIView):
         resultado = FuncionarioService.atualizar_funcionario(
             id_funcionario=id_funcionario, dados=_request.data
         )
+        if resultado.get("error"):
+            return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(resultado, status=status.HTTP_200_OK)
+
+    def delete(self, request, id_funcionario):
+        resultado = FuncionarioService.deletar_funcionario(id_funcionario=id_funcionario)
         if resultado.get("error"):
             return Response({"error": resultado["error"]}, status=status.HTTP_400_BAD_REQUEST)
         return Response(resultado, status=status.HTTP_200_OK)

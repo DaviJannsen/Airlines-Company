@@ -244,6 +244,47 @@ class FuncionarioService:
         return {"message": "Funcionário atualizado com sucesso.", "id_funcionario": id_funcionario}
 
     @staticmethod
+    def deletar_funcionario(id_funcionario: int) -> dict:
+        """
+        Exclui um funcionário. Impede exclusão se houver escalas vinculadas.
+        DELETE em comissao_de_bordo — CASCADE remove piloto/comissario automaticamente.
+        """
+        try:
+            with db_transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM airline.escala_trabalho WHERE id_funcionario = %s;",
+                        [id_funcionario],
+                    )
+                    total_escalas = cursor.fetchone()[0]
+                    if total_escalas > 0:
+                        return {
+                            "error": (
+                                f"Funcionário possui {total_escalas} voo(s) escalado(s). "
+                                "Remova das escalas antes de excluir."
+                            )
+                        }
+
+                    cursor.execute(
+                        "DELETE FROM airline.comissao_de_bordo WHERE id_funcionario = %s RETURNING id_funcionario;",
+                        [id_funcionario],
+                    )
+                    if not cursor.fetchone():
+                        return {"error": "Funcionário não encontrado."}
+
+        except (IntegrityError, DatabaseError) as e:
+            cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
+            diag  = getattr(cause, 'diag', None)
+            msg   = (
+                getattr(diag, 'message_primary', None)
+                or (e.args[0] if e.args else None)
+                or str(e)
+            )
+            return {'error': str(msg).splitlines()[0] or 'Erro ao excluir funcionário.'}
+
+        return {"message": "Funcionário excluído com sucesso.", "id_funcionario": id_funcionario}
+
+    @staticmethod
     def criar_funcionario(dados: dict) -> dict:
         """
         Cria um Piloto ou Comissário.

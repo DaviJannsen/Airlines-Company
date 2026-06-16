@@ -50,7 +50,8 @@ class VooService:
                 t.tipo_trecho,
                 ma.capacidade                       AS capacidade_total,
                 COUNT(DISTINCT da.id_passagem)      AS passagens_emitidas,
-                (ma.capacidade - COUNT(DISTINCT da.id_passagem)) AS assentos_restantes
+                (ma.capacidade - COUNT(DISTINCT da.id_passagem)) AS assentos_restantes,
+                v.data_hora_efetiva_cancelamento::TEXT         AS data_hora_cancelamento
             FROM airline.voo v
             INNER JOIN airline.trecho t          ON t.num_voo = v.num_voo
             INNER JOIN airline.aeroporto a_orig  ON a_orig.codigo_IATA = t.codigo_IATA_origem
@@ -80,10 +81,14 @@ class VooService:
             sql += " AND v.tipo_voo = %s"
             params.append(filtros["tipo_voo"])
 
+        if filtros.get("busca"):
+            sql += " AND v.num_voo ILIKE %s"
+            params.append(f"%{filtros['busca']}%")
+
         sql += """
             GROUP BY
                 v.num_voo, v.tipo_voo, v.data_partida, v.hora_partida, v.previsao_chegada,
-                v.status_voo, v.cod_aeronave,
+                v.status_voo, v.cod_aeronave, v.data_hora_efetiva_cancelamento,
                 t.codigo_IATA_origem, a_orig.nome_aeroporto, c_orig.nome_cidade, c_orig.pais,
                 t.codigo_IATA_destino, a_dest.nome_aeroporto, c_dest.nome_cidade, c_dest.pais,
                 t.distancia_km, t.tipo_trecho, ma.capacidade
@@ -107,6 +112,7 @@ class VooService:
                 v.previsao_chegada,
                 v.status_voo,
                 v.motivo_atraso_cancelamento,
+                v.data_hora_efetiva_cancelamento::TEXT AS data_hora_cancelamento,
                 -- Aeronave
                 a.cod_aeronave,
                 ma.modelo,
