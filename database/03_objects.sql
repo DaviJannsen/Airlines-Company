@@ -118,7 +118,35 @@ FOR EACH ROW
 EXECUTE FUNCTION fn_valida_habilitacao_piloto();
 
 -- ============================================================
--- GATILHO 2: trg_atualiza_aviso_manutencao
+-- GATILHO 2 (extra): trg_valida_certificado_comissario
+-- Descrição: Antes de inserir ou atualizar um registro na tabela
+-- Comissario, verifica se a validade_certificado não está vencida.
+-- Espelho do trg_valida_habilitacao_piloto para garantir que
+-- comissários com certificado expirado também sejam bloqueados.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_valida_certificado_comissario()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.validade_certificado < CURRENT_DATE THEN
+        RAISE EXCEPTION
+            'Certificado vencido para o comissário id=%. Validade: %. Data atual: %.',
+            NEW.id_funcionario,
+            NEW.validade_certificado,
+            CURRENT_DATE;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_valida_certificado_comissario
+BEFORE INSERT OR UPDATE ON Comissario
+FOR EACH ROW
+EXECUTE FUNCTION fn_valida_certificado_comissario();
+
+-- ============================================================
+-- GATILHO 3: trg_atualiza_aviso_manutencao
 -- Descrição: Após atualizar data_ultima_manutencao em Aeronave,
 -- calcula automaticamente se a aeronave está próxima ou acima
 -- do limite de manutenção (180 dias). Se sim, define
