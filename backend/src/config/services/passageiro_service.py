@@ -332,8 +332,44 @@ class PassageiroService:
 
     @staticmethod
     def autorizar_embarque(id_controle: int) -> dict:
-        """Autoriza o embarque: marca presença e aprova autorização."""
+        """
+        Autoriza o embarque se o pagamento estiver confirmado.
+        Se pagamento Pendente, nega automaticamente com motivo 'Pagamento não confirmado'.
+        """
         with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT r.status_pagamento
+                FROM airline.controle_embarque ce
+                JOIN airline.passagem p ON p.id_passagem = ce.id_passagem
+                JOIN airline.reserva r  ON r.codigo_localizador = p.codigo_localizador
+                WHERE ce.id_controle_embarque = %s
+                LIMIT 1;
+                """,
+                [id_controle],
+            )
+            row = cursor.fetchone()
+            if not row:
+                return {"error": "Registro de embarque não encontrado."}
+
+            status_pagamento = row[0]
+
+            if status_pagamento == 'Pendente':
+                cursor.execute(
+                    """
+                    UPDATE airline.controle_embarque
+                    SET status_autorizacao = 'Negado',
+                        motivo_impedimento_embarque = 'Pagamento não confirmado'
+                    WHERE id_controle_embarque = %s;
+                    """,
+                    [id_controle],
+                )
+                return {
+                    "message": "Embarque negado automaticamente: pagamento não confirmado.",
+                    "id_controle_embarque": id_controle,
+                    "auto_negado": True,
+                }
+
             cursor.execute(
                 """
                 UPDATE airline.controle_embarque
@@ -346,6 +382,7 @@ class PassageiroService:
             )
             if not cursor.fetchone():
                 return {"error": "Registro de embarque não encontrado."}
+
         return {"message": "Embarque autorizado.", "id_controle_embarque": id_controle}
 
     @staticmethod

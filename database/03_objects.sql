@@ -172,3 +172,43 @@ CREATE OR REPLACE TRIGGER trg_log_cancelamento_voo
 BEFORE UPDATE OF status_voo ON Voo
 FOR EACH ROW
 EXECUTE FUNCTION fn_log_cancelamento_voo();
+
+-- ============================================================
+-- GATILHO 4: trg_valida_capacidade_voo
+-- Descrição: Antes de inserir em Destinado_A, verifica se
+-- o número de passagens já emitidas para o voo não atingiu
+-- a capacidade máxima da aeronave. Garante a restrição no
+-- banco independentemente da camada de aplicação.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_valida_capacidade_voo()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_capacidade INTEGER;
+    v_emitidas   INTEGER;
+BEGIN
+    SELECT ma.capacidade INTO v_capacidade
+    FROM airline.voo v
+    JOIN airline.aeronave a         ON a.cod_aeronave = v.cod_aeronave
+    JOIN airline.modelo_aeronave ma ON ma.modelo = a.modelo
+    WHERE v.num_voo = NEW.num_voo;
+
+    SELECT COUNT(*) INTO v_emitidas
+    FROM airline.destinado_a
+    WHERE num_voo = NEW.num_voo;
+
+    IF v_emitidas >= v_capacidade THEN
+        RAISE EXCEPTION
+            'Capacidade máxima atingida: voo % já possui % de % passagens permitidas.',
+            NEW.num_voo, v_emitidas, v_capacidade;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_valida_capacidade_voo
+BEFORE INSERT ON Destinado_A
+FOR EACH ROW
+EXECUTE FUNCTION fn_valida_capacidade_voo();
