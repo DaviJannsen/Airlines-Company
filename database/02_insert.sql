@@ -117,7 +117,7 @@ INSERT INTO Comissao_De_Bordo (id_funcionario, cpf, nome_completo, data_admissao
 (8,  '89012345678', 'Patrícia Nascimento Lima', '2014-08-12',  9000.00),  -- Comissária
 (9,  '90123456789', 'Marcos Vinícius Araujo',   '2022-02-14',  8300.00),  -- Comissário
 (10, '01234567890', 'Cláudia Regina Ferreira',  '2013-05-03', 19000.00)   -- Piloto
-ON CONFLICT (cpf) DO NOTHING;
+ON CONFLICT (id_funcionario) DO NOTHING;
 
 SELECT setval(pg_get_serial_sequence('comissao_de_bordo', 'id_funcionario'), 10);
 
@@ -208,7 +208,7 @@ INSERT INTO Passageiro (id_passageiro, nome_completo, data_nascimento, nacionali
 (10, 'Felipe Martins Borges',    '2000-01-17', 'Brasileira',    'CPF-77788899900', '21977001122', TRUE),
 (11, 'Carla Mendonça Pires',     '1975-04-03', 'Brasileira',    'CPF-88899900011', NULL,          FALSE),
 (12, 'Gustavo Henrique Ribeiro', '1998-10-21', 'Brasileira',    'CPF-99900011122', '85988004455', FALSE)
-ON CONFLICT (documento_identidade) DO NOTHING;
+ON CONFLICT (id_passageiro) DO NOTHING;
 
 SELECT setval(pg_get_serial_sequence('passageiro', 'id_passageiro'), 12);
 
@@ -216,17 +216,17 @@ SELECT setval(pg_get_serial_sequence('passageiro', 'id_passageiro'), 12);
 -- 14. RESERVAS
 -- ------------------------------------------------------------
 INSERT INTO Reserva (codigo_localizador, data_criacao, status_pagamento, valor_total, agencia_parceira, cupom_desconto) VALUES
-('RES-GRU-001', '2026-05-10', 'Pago',       850.00,  FALSE, FALSE),
-('RES-GRU-002', '2026-05-11', 'Pago',      1200.00,  FALSE, TRUE),
-('RES-GRU-003', '2026-05-12', 'Pago',      3500.00,  TRUE,  FALSE),
-('RES-GRU-004', '2026-05-15', 'Pendente',  2800.00,  FALSE, FALSE),
-('RES-GRU-005', '2026-05-18', 'Pago',       650.00,  FALSE, FALSE),
-('RES-GRU-006', '2026-05-20', 'Pago',      1800.00,  TRUE,  TRUE),
-('RES-GRU-007', '2026-05-22', 'Pago',      9200.00,  FALSE, FALSE),
-('RES-GRU-008', '2026-05-25', 'Cancelado', 1100.00,  FALSE, FALSE),
-('RES-GRU-009', '2026-06-01', 'Pago',       720.00,  FALSE, FALSE),
-('RES-GRU-010', '2026-06-02', 'Pago',      4300.00,  TRUE,  FALSE)
-ON CONFLICT (codigo_localizador) DO NOTHING;
+('RES-GRU-001', '2026-05-10', 'Pago',      1700.00,  FALSE, FALSE),  -- 2 × Econômica (850×2)
+('RES-GRU-002', '2026-05-11', 'Pago',       850.00,  FALSE, TRUE),   -- 1 × Econômica
+('RES-GRU-003', '2026-05-12', 'Pago',      2500.00,  TRUE,  FALSE),  -- 1 × Executiva
+('RES-GRU-004', '2026-05-15', 'Pendente',   850.00,  FALSE, FALSE),  -- 1 × Econômica
+('RES-GRU-005', '2026-05-18', 'Pago',       850.00,  FALSE, FALSE),  -- 1 × Econômica
+('RES-GRU-006', '2026-05-20', 'Pago',      8000.00,  TRUE,  TRUE),   -- 1 × Primeira Classe
+('RES-GRU-007', '2026-05-22', 'Pago',      2500.00,  FALSE, FALSE),  -- 1 × Executiva
+('RES-GRU-008', '2026-05-25', 'Cancelado',  850.00,  FALSE, FALSE),  -- 1 × Econômica
+('RES-GRU-009', '2026-06-01', 'Pago',       850.00,  FALSE, FALSE),  -- 1 × Econômica
+('RES-GRU-010', '2026-06-02', 'Pago',      3350.00,  TRUE,  FALSE)   -- 1 × Econômica + 1 × Executiva (850+2500)
+ON CONFLICT (codigo_localizador) DO UPDATE SET valor_total = EXCLUDED.valor_total;
 
 -- ------------------------------------------------------------
 -- 15. PASSAGENS  (id explícito para idempotência)
