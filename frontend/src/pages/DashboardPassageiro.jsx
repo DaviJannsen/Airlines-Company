@@ -489,7 +489,7 @@ function EditarPerfilModal({ onClose, onSuccess }) {
       .then(({ data }) => {
         setForm({
           nome_completo: data.nome_completo || '',
-          data_nascimento: data.data_nascimento || '',
+          data_nascimento: data.data_nascimento ? String(data.data_nascimento).slice(0, 10) : '',
           contato_emergencia: data.contato_emergencia || '',
           necessidades_especiais: !!data.necessidades_especiais,
         });

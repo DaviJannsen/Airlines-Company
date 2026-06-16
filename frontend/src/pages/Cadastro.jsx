@@ -10,7 +10,7 @@ const DOC_TYPES = [
 ];
 
 const inputCls =
-  'w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 focus:border-transparent transition-all placeholder:text-slate-400';
+  'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white placeholder:text-slate-400';
 
 export default function Cadastro() {
   const { login } = useAuth();
@@ -175,9 +175,17 @@ export default function Cadastro() {
                   <input
                     type="text"
                     value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setDocNumber(
+                        docType.prefix === 'CPF-'
+                          ? raw.replace(/\D/g, '').slice(0, 11)
+                          : raw
+                      );
+                    }}
                     placeholder={docType.placeholder}
                     required
+                    inputMode={docType.prefix === 'CPF-' ? 'numeric' : 'text'}
                     className="flex-1 px-3 py-3 text-slate-800 text-sm focus:outline-none"
                   />
                 </div>
