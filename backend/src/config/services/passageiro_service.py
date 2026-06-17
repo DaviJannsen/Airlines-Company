@@ -104,7 +104,7 @@ class PassageiroService:
         sql = """
             SELECT id_passageiro, nome_completo, data_nascimento,
                    documento_identidade, necessidades_especiais, contato_emergencia
-            FROM passageiro
+            FROM airline.passageiro
             WHERE documento_identidade = %s
             LIMIT 1;
         """
