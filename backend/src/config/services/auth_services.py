@@ -76,7 +76,6 @@ class AuthService:
         if not user.is_active:
             return {"error": "Conta inativa. Contate o administrador."}
 
-        # ─── JÁ ESTÁ COM PREFIXO AIRLINE CORRETO ──────────────────────────────
         sql = """
             SELECT cb.id_funcionario, cb.nome_completo
             FROM airline.Comissao_De_Bordo cb

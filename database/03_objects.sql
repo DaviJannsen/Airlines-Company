@@ -288,7 +288,7 @@ BEGIN
         LEFT  JOIN airline.controle_embarque ce
                ON ce.id_passagem = da.id_passagem AND ce.num_voo = da.num_voo
         WHERE da.num_voo = NEW.num_voo
-          AND (r.status_pagamento = 'Pago' AND ce.status_autorizacao = 'Autorizado');
+          AND (r.status_pagamento = 'Pago' OR ce.status_autorizacao = 'Autorizado');
 
         IF v_passageiros < 1 THEN
             RAISE EXCEPTION
