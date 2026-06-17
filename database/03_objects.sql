@@ -67,7 +67,7 @@ GROUP BY da.num_voo, p.classe_cabine;
 -- Um índice composto em (data_partida, status_voo) evita
 -- full-scans na tabela Voo para estas consultas recorrentes.
 -- ============================================================
-CREATE INDEX idx_voo_data_status
+CREATE INDEX IF NOT EXISTS idx_voo_data_status
     ON Voo (data_partida, status_voo);
 
 -- ============================================================
@@ -76,7 +76,7 @@ CREATE INDEX idx_voo_data_status
 -- percorrem a tabela Passagem filtrando por id_passageiro.
 -- O índice acelera essas consultas sem necessidade de seq scan.
 -- ============================================================
-CREATE INDEX idx_passagem_passageiro
+CREATE INDEX IF NOT EXISTS idx_passagem_passageiro
     ON Passagem (id_passageiro);
 
 -- ============================================================
@@ -85,7 +85,7 @@ CREATE INDEX idx_passagem_passageiro
 -- junto com Voo via JOIN por num_voo; o índice elimina buscas
 -- sequenciais nessa coluna de FK.
 -- ============================================================
-CREATE INDEX idx_trecho_voo
+CREATE INDEX IF NOT EXISTS idx_trecho_voo
     ON Trecho (num_voo);
 
 -- ============================================================
@@ -112,13 +112,41 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_valida_habilitacao_piloto
+CREATE OR REPLACE TRIGGER trg_valida_habilitacao_piloto
 BEFORE INSERT OR UPDATE ON Piloto
 FOR EACH ROW
 EXECUTE FUNCTION fn_valida_habilitacao_piloto();
 
 -- ============================================================
--- GATILHO 2: trg_atualiza_aviso_manutencao
+-- GATILHO 2 (extra): trg_valida_certificado_comissario
+-- Descrição: Antes de inserir ou atualizar um registro na tabela
+-- Comissario, verifica se a validade_certificado não está vencida.
+-- Espelho do trg_valida_habilitacao_piloto para garantir que
+-- comissários com certificado expirado também sejam bloqueados.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_valida_certificado_comissario()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.validade_certificado < CURRENT_DATE THEN
+        RAISE EXCEPTION
+            'Certificado vencido para o comissário id=%. Validade: %. Data atual: %.',
+            NEW.id_funcionario,
+            NEW.validade_certificado,
+            CURRENT_DATE;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_valida_certificado_comissario
+BEFORE INSERT OR UPDATE ON Comissario
+FOR EACH ROW
+EXECUTE FUNCTION fn_valida_certificado_comissario();
+
+-- ============================================================
+-- GATILHO 3: trg_atualiza_aviso_manutencao
 -- Descrição: Após atualizar data_ultima_manutencao em Aeronave,
 -- calcula automaticamente se a aeronave está próxima ou acima
 -- do limite de manutenção (180 dias). Se sim, define
@@ -141,7 +169,7 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_atualiza_aviso_manutencao
+CREATE OR REPLACE TRIGGER trg_atualiza_aviso_manutencao
 BEFORE INSERT OR UPDATE OF data_ultima_manutencao ON Aeronave
 FOR EACH ROW
 EXECUTE FUNCTION fn_atualiza_aviso_manutencao();
@@ -168,7 +196,112 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_log_cancelamento_voo
+CREATE OR REPLACE TRIGGER trg_log_cancelamento_voo
 BEFORE UPDATE OF status_voo ON Voo
 FOR EACH ROW
 EXECUTE FUNCTION fn_log_cancelamento_voo();
+
+-- ============================================================
+-- GATILHO 4: trg_valida_capacidade_voo
+-- Descrição: Antes de inserir em Destinado_A, verifica se
+-- o número de passagens já emitidas para o voo não atingiu
+-- a capacidade máxima da aeronave. Garante a restrição no
+-- banco independentemente da camada de aplicação.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_valida_capacidade_voo()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_capacidade INTEGER;
+    v_emitidas   INTEGER;
+BEGIN
+    SELECT ma.capacidade INTO v_capacidade
+    FROM airline.voo v
+    JOIN airline.aeronave a         ON a.cod_aeronave = v.cod_aeronave
+    JOIN airline.modelo_aeronave ma ON ma.modelo = a.modelo
+    WHERE v.num_voo = NEW.num_voo;
+
+    SELECT COUNT(*) INTO v_emitidas
+    FROM airline.destinado_a
+    WHERE num_voo = NEW.num_voo;
+
+    IF v_emitidas >= v_capacidade THEN
+        RAISE EXCEPTION
+            'Capacidade máxima atingida: voo % já possui % de % passagens permitidas.',
+            NEW.num_voo, v_emitidas, v_capacidade;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_valida_capacidade_voo
+BEFORE INSERT ON Destinado_A
+FOR EACH ROW
+EXECUTE FUNCTION fn_valida_capacidade_voo();
+
+-- ============================================================
+-- GATILHO 6: trg_valida_composicao_voo
+-- Descrição: Antes de mover o status_voo para 'Em Voo', verifica
+-- se o voo possui ao menos 1 piloto escalado, 1 comissário
+-- escalado e 1 passageiro com passagem emitida. Impede que um
+-- voo "decole" sem tripulação mínima ou sem passageiros.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_valida_composicao_voo()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_pilotos     INTEGER;
+    v_comissarios INTEGER;
+    v_passageiros INTEGER;
+BEGIN
+    IF NEW.status_voo = 'Em Voo' AND OLD.status_voo <> 'Em Voo' THEN
+
+        SELECT COUNT(*) INTO v_pilotos
+        FROM airline.escala_trabalho et
+        INNER JOIN airline.piloto p ON p.id_funcionario = et.id_funcionario
+        WHERE et.num_voo = NEW.num_voo;
+
+        IF v_pilotos < 1 THEN
+            RAISE EXCEPTION
+                'Voo % não pode iniciar: nenhum piloto escalado.',
+                NEW.num_voo;
+        END IF;
+
+        SELECT COUNT(*) INTO v_comissarios
+        FROM airline.escala_trabalho et
+        INNER JOIN airline.comissario c ON c.id_funcionario = et.id_funcionario
+        WHERE et.num_voo = NEW.num_voo;
+
+        IF v_comissarios < 1 THEN
+            RAISE EXCEPTION
+                'Voo % não pode iniciar: nenhum comissário escalado.',
+                NEW.num_voo;
+        END IF;
+
+        SELECT COUNT(*) INTO v_passageiros
+        FROM airline.destinado_a da
+        INNER JOIN airline.passagem  p  ON p.id_passagem       = da.id_passagem
+        INNER JOIN airline.reserva   r  ON r.codigo_localizador = p.codigo_localizador
+        LEFT  JOIN airline.controle_embarque ce
+               ON ce.id_passagem = da.id_passagem AND ce.num_voo = da.num_voo
+        WHERE da.num_voo = NEW.num_voo
+          AND (r.status_pagamento = 'Pago' OR ce.status_autorizacao = 'Autorizado');
+
+        IF v_passageiros < 1 THEN
+            RAISE EXCEPTION
+                'Voo % não pode iniciar: nenhum passageiro com pagamento confirmado ou embarque autorizado.',
+                NEW.num_voo;
+        END IF;
+
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_valida_composicao_voo
+BEFORE UPDATE OF status_voo ON Voo
+FOR EACH ROW
+EXECUTE FUNCTION fn_valida_composicao_voo();
