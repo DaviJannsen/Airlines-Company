@@ -172,11 +172,13 @@ const VOO_DISPONIVEL = (v) =>
 
 // ── Modal de Reserva Multi-step ───────────────────────────────────────────────
 function ReservarModal({ onClose, onSuccess }) {
-  const [step, setStep] = useState('flight-select'); // flight-select | class-select | confirm | loading | success | error
+  const [step, setStep] = useState('flight-select'); // flight-select | class-select | baggage-select | confirm | loading | success | error
   const [voos, setVoos] = useState([]);
   const [voosLoading, setVoosLoading] = useState(true);
   const [selectedVoo, setSelectedVoo] = useState(null);
   const [selectedClass, setSelectedClass] = useState(null);
+  const [bagagemDespachada, setBagagemDespachada] = useState(false);
+  const [pesoBagagem, setPesoBagagem] = useState('');
   const [resultado, setResultado] = useState(null);
   const [erroModal, setErroModal] = useState('');
 
@@ -192,6 +194,8 @@ function ReservarModal({ onClose, onSuccess }) {
       const { data } = await api.post('/passageiro/reservar/', {
         num_voo: selectedVoo.num_voo,
         classe_cabine: selectedClass,
+        bagagem_despachada: bagagemDespachada,
+        peso_bagagem: bagagemDespachada && pesoBagagem ? parseFloat(pesoBagagem) : null,
       });
       setResultado(data);
       setStep('success');
@@ -221,7 +225,8 @@ function ReservarModal({ onClose, onSuccess }) {
             <h3 className="text-xl font-bold">
               {step === 'flight-select' && '1. Escolha o Voo'}
               {step === 'class-select' && '2. Classe de Cabine'}
-              {step === 'confirm' && '3. Confirmar Reserva'}
+              {step === 'baggage-select' && '3. Bagagem'}
+              {step === 'confirm' && '4. Confirmar Reserva'}
               {step === 'loading' && 'Processando...'}
               {step === 'success' && 'Reserva Confirmada!'}
               {step === 'error' && 'Erro na Reserva'}
@@ -310,7 +315,7 @@ function ReservarModal({ onClose, onSuccess }) {
               {CABIN_CLASSES.map((cls) => (
                 <button
                   key={cls.key}
-                  onClick={() => { setSelectedClass(cls.key); setStep('confirm'); }}
+                  onClick={() => { setSelectedClass(cls.key); setStep('baggage-select'); }}
                   className="w-full text-left border border-slate-200 rounded-2xl p-5 hover:border-blue-900 hover:bg-blue-50/30 transition-all group"
                 >
                   <div className="flex items-center justify-between">
@@ -340,7 +345,72 @@ function ReservarModal({ onClose, onSuccess }) {
             </div>
           )}
 
-          {/* ── Step 3: confirm ── */}
+          {/* ── Step 3: baggage-select ── */}
+          {step === 'baggage-select' && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500 mb-1">
+                Você deseja despachar alguma bagagem? <span className="text-slate-400">(opcional)</span>
+              </p>
+
+              {/* Sem bagagem */}
+              <button
+                onClick={() => { setBagagemDespachada(false); setPesoBagagem(''); setStep('confirm'); }}
+                className="w-full text-left border border-slate-200 rounded-2xl p-5 hover:border-blue-900 hover:bg-blue-50/30 transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-3xl">🎒</span>
+                  <div>
+                    <p className="font-bold text-slate-800">Somente bagagem de mão</p>
+                    <p className="text-xs text-slate-400">Sem despacho de bagagem</p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Com bagagem */}
+              <div className="border border-slate-200 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-4">
+                  <span className="text-3xl">🧳</span>
+                  <div>
+                    <p className="font-bold text-slate-800">Despachar bagagem</p>
+                    <p className="text-xs text-slate-400">Informe o peso estimado</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                      Peso (kg)
+                    </label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="50"
+                      step="0.1"
+                      value={pesoBagagem}
+                      onChange={(e) => setPesoBagagem(e.target.value)}
+                      placeholder="Ex: 23.0"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white"
+                    />
+                  </div>
+                  <button
+                    disabled={!pesoBagagem || parseFloat(pesoBagagem) <= 0}
+                    onClick={() => { setBagagemDespachada(true); setStep('confirm'); }}
+                    className="bg-blue-900 hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setStep('class-select')}
+                className="text-slate-400 hover:text-slate-600 text-sm w-full text-center pt-2 transition-colors"
+              >
+                ← Voltar para classe
+              </button>
+            </div>
+          )}
+
+          {/* ── Step 4: confirm ── */}
           {step === 'confirm' && selectedVoo && selectedClass && (
             <div className="space-y-5">
               <div
@@ -373,6 +443,7 @@ function ReservarModal({ onClose, onSuccess }) {
               <div className="bg-slate-50 rounded-2xl p-5 space-y-3 text-sm">
                 {[
                   ['Classe de Cabine', `${CABIN_CLASSES.find(c => c.key === selectedClass)?.icon} ${selectedClass}`],
+                  ['Bagagem Despachada', bagagemDespachada ? `🧳 Sim — ${pesoBagagem} kg` : '🎒 Não (somente mão)'],
                   ['Assento', 'Será atribuído automaticamente'],
                   ['Status de Pagamento', 'Pendente (pague no balcão)'],
                   ['Valor Total', fmtR(CABIN_CLASSES.find(c => c.key === selectedClass)?.preco)],
@@ -386,7 +457,7 @@ function ReservarModal({ onClose, onSuccess }) {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep('class-select')}
+                  onClick={() => setStep('baggage-select')}
                   className="flex-1 border border-slate-200 text-slate-600 hover:bg-slate-50 py-3.5 rounded-xl font-semibold transition-colors"
                 >
                   ← Voltar
@@ -422,6 +493,9 @@ function ReservarModal({ onClose, onSuccess }) {
                   ['Voo', resultado.num_voo],
                   ['Assento', resultado.assento],
                   ['Classe', resultado.classe_cabine],
+                  ['Bagagem', resultado.bagagem_despachada
+                    ? `🧳 Despachada — ${resultado.peso_bagagem} kg`
+                    : '🎒 Somente mão'],
                   ['Valor Total', fmtR(resultado.valor_total)],
                   ['Status de Embarque', 'Ausente (aguardando gate)'],
                 ].map(([label, value]) => (

@@ -819,7 +819,7 @@ function VoosTab({ voos, loading, onVooCreated, onSearch }) {
   const [showCriar, setShowCriar] = useState(false);
   const [detailVoo, setDetailVoo] = useState(null);
   const [statusLoading, setStatusLoading] = useState(null);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState(null);
   const [search, setSearch] = useState('');
   const mountedRef = useRef(false);
 
@@ -833,13 +833,13 @@ function VoosTab({ voos, loading, onVooCreated, onSearch }) {
     setStatusLoading(num_voo + novoStatus);
     try {
       await api.patch(`/admin/voos/${num_voo}/status/`, { status: novoStatus });
-      setFeedback(`Voo ${num_voo} → ${novoStatus}.`);
+      setFeedback({ msg: `Voo ${num_voo} → ${novoStatus}.`, err: false });
       onVooCreated();
     } catch (err) {
-      setFeedback(err.response?.data?.error || 'Erro ao atualizar status.');
+      setFeedback({ msg: err.response?.data?.error || 'Erro ao atualizar status.', err: true });
     } finally {
       setStatusLoading(null);
-      setTimeout(() => setFeedback(''), 4000);
+      setTimeout(() => setFeedback(null), 4000);
     }
   };
 
@@ -869,8 +869,12 @@ function VoosTab({ voos, loading, onVooCreated, onSearch }) {
       </div>
 
       {feedback && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-2xl px-5 py-3 mb-4 font-medium">
-          {feedback}
+        <div className={`text-sm rounded-2xl px-5 py-3 mb-4 font-medium border ${
+          feedback.err
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+        }`}>
+          {feedback.msg}
         </div>
       )}
 

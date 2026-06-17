@@ -206,11 +206,20 @@ class VooService:
                 )
             }
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE airline.voo SET status_voo = %s WHERE num_voo = %s;",
-                [novo_status, num_voo],
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE airline.voo SET status_voo = %s WHERE num_voo = %s;",
+                    [novo_status, num_voo],
+                )
+        except Exception as e:
+            cause = getattr(e, '__cause__', e)
+            diag  = getattr(cause, 'diag', None)
+            msg   = (
+                getattr(diag, 'message_primary', None)
+                or str(e)
             )
+            return {"error": str(msg).splitlines()[0]}
 
         return {"num_voo": num_voo, "status_anterior": status_atual, "status_voo": novo_status}
 

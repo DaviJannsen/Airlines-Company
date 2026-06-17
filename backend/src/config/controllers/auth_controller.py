@@ -12,7 +12,6 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-# ─── IMPORTS CORRIGIDOS ───────────────────────────────────────────────────────
 from backend.src.config.services.auth_services import AuthService
 from backend.src.config.services.passageiro_service import PassageiroService
 

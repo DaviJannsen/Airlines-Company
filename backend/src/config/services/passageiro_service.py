@@ -166,6 +166,15 @@ class PassageiroService:
         """
         num_voo = dados.get("num_voo")
         classe_cabine = dados.get("classe_cabine", "Econômica")
+        bagagem_despachada = bool(dados.get("bagagem_despachada", False))
+        peso_bagagem = dados.get("peso_bagagem")
+        if peso_bagagem is not None:
+            try:
+                peso_bagagem = float(peso_bagagem)
+                if peso_bagagem <= 0:
+                    peso_bagagem = None
+            except (TypeError, ValueError):
+                peso_bagagem = None
 
         if not num_voo:
             return {"error": "O campo 'num_voo' é obrigatório."}
@@ -240,11 +249,12 @@ class PassageiroService:
                     """
                     INSERT INTO airline.passagem (
                         classe_cabine, assento_passageiro, id_passageiro,
-                        codigo_localizador, bagagem_despachada
-                    ) VALUES (%s, %s, %s, %s, FALSE)
+                        codigo_localizador, bagagem_despachada, peso_bagagem
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id_passagem;
                     """,
-                    [classe_cabine, assento, id_passageiro, localizador],
+                    [classe_cabine, assento, id_passageiro, localizador,
+                     bagagem_despachada, peso_bagagem if bagagem_despachada else None],
                 )
                 id_passagem = cursor.fetchone()[0]
 
@@ -272,6 +282,8 @@ class PassageiroService:
             "classe_cabine": classe_cabine,
             "num_voo": num_voo,
             "valor_total": PRECOS[classe_cabine],
+            "bagagem_despachada": bagagem_despachada,
+            "peso_bagagem": peso_bagagem if bagagem_despachada else None,
             "id_controle_embarque": id_controle,
         }
 

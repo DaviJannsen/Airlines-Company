@@ -240,3 +240,68 @@ CREATE OR REPLACE TRIGGER trg_valida_capacidade_voo
 BEFORE INSERT ON Destinado_A
 FOR EACH ROW
 EXECUTE FUNCTION fn_valida_capacidade_voo();
+
+-- ============================================================
+-- GATILHO 6: trg_valida_composicao_voo
+-- Descrição: Antes de mover o status_voo para 'Em Voo', verifica
+-- se o voo possui ao menos 1 piloto escalado, 1 comissário
+-- escalado e 1 passageiro com passagem emitida. Impede que um
+-- voo "decole" sem tripulação mínima ou sem passageiros.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_valida_composicao_voo()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_pilotos     INTEGER;
+    v_comissarios INTEGER;
+    v_passageiros INTEGER;
+BEGIN
+    IF NEW.status_voo = 'Em Voo' AND OLD.status_voo <> 'Em Voo' THEN
+
+        SELECT COUNT(*) INTO v_pilotos
+        FROM airline.escala_trabalho et
+        INNER JOIN airline.piloto p ON p.id_funcionario = et.id_funcionario
+        WHERE et.num_voo = NEW.num_voo;
+
+        IF v_pilotos < 1 THEN
+            RAISE EXCEPTION
+                'Voo % não pode iniciar: nenhum piloto escalado.',
+                NEW.num_voo;
+        END IF;
+
+        SELECT COUNT(*) INTO v_comissarios
+        FROM airline.escala_trabalho et
+        INNER JOIN airline.comissario c ON c.id_funcionario = et.id_funcionario
+        WHERE et.num_voo = NEW.num_voo;
+
+        IF v_comissarios < 1 THEN
+            RAISE EXCEPTION
+                'Voo % não pode iniciar: nenhum comissário escalado.',
+                NEW.num_voo;
+        END IF;
+
+        SELECT COUNT(*) INTO v_passageiros
+        FROM airline.destinado_a da
+        INNER JOIN airline.passagem  p  ON p.id_passagem       = da.id_passagem
+        INNER JOIN airline.reserva   r  ON r.codigo_localizador = p.codigo_localizador
+        LEFT  JOIN airline.controle_embarque ce
+               ON ce.id_passagem = da.id_passagem AND ce.num_voo = da.num_voo
+        WHERE da.num_voo = NEW.num_voo
+          AND (r.status_pagamento = 'Pago' AND ce.status_autorizacao = 'Autorizado');
+
+        IF v_passageiros < 1 THEN
+            RAISE EXCEPTION
+                'Voo % não pode iniciar: nenhum passageiro com pagamento confirmado ou embarque autorizado.',
+                NEW.num_voo;
+        END IF;
+
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_valida_composicao_voo
+BEFORE UPDATE OF status_voo ON Voo
+FOR EACH ROW
+EXECUTE FUNCTION fn_valida_composicao_voo();
