@@ -1,0 +1,44 @@
+server:
+  port: 8000
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: airlines-company-api
+  jackson:
+    # O frontend (React/Vite) foi construido contra o contrato JSON em
+    # snake_case do Django/DRF original (documento_identidade, nome_completo,
+    # has_admin...). Esta estrategia faz o Jackson (de/)serializar os campos
+    # camelCase idiomaticos dos DTOs Java como snake_case na API, preservando
+    # o contrato sem precisar de @JsonProperty em cada campo.
+    property-naming-strategy: SNAKE_CASE
+  datasource:
+    # sslmode=require: o .env aponta para um Postgres gerenciado (Supabase),
+    # que exige TLS - mesmo requisito que o DATABASE_URL usado pelo Django.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME}?currentSchema=airline&sslmode=${DB_SSLMODE:require}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: airline
+
+# O schema (tabelas, views, indices, triggers) e' criado pelos scripts em
+# database/01_create.sql .. 05_auth.sql, executados manualmente via psql -
+# o Hibernate apenas valida o mapeamento (ddl-auto: validate), nunca gera DDL.
+
+airlines:
+  jwt:
+    secret: ${JWT_SECRET:change-this-secret-in-prod-min-256-bits-000000000000}
+    # Reaproveita os mesmos nomes de variavel ja usados pelo SIMPLE_JWT do
+    # Django em core/settings.py (JWT_ACCESS_TOKEN_LIFETIME_MINUTES / _DAYS).
+    access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_LIFETIME_MINUTES:1440}
+    refresh-token-expiration-days: ${JWT_REFRESH_TOKEN_LIFETIME_DAYS:7}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
